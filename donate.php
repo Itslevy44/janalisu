@@ -259,20 +259,7 @@
         }
 
         /* M-Pesa Instructions */
-        .mpesa-instructions {
-            background: linear-gradient(135deg, rgba(0, 128, 0, 0.05) 0%, rgba(0, 100, 0, 0.05) 100%);
-            padding: 2rem;
-            border-radius: 15px;
-            border-left: 5px solid #22c55e;
-            margin-top: 2rem;
-        }
-
-        .mpesa-logo {
-            width: 100px;
-            height: auto;
-            margin: 0 auto 1.5rem;
-            display: block;
-        }
+        
 
         .instruction-step {
             display: flex;
@@ -302,27 +289,7 @@
             font-weight: 500;
         }
 
-        .till-number {
-            background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
-            color: white;
-            padding: 1.5rem;
-            border-radius: 15px;
-            text-align: center;
-            margin: 2rem 0;
-            box-shadow: 0 10px 30px rgba(34, 197, 94, 0.2);
-        }
-
-        .till-number h4 {
-            font-size: 1.3rem;
-            margin-bottom: 0.5rem;
-        }
-
-        .till-number .number {
-            font-size: 2.5rem;
-            font-weight: 900;
-            letter-spacing: 2px;
-        }
-
+       
         /* Contact Info */
         .contact-info {
             background: linear-gradient(135deg, rgba(236, 72, 153, 0.05) 0%, rgba(139, 92, 246, 0.05) 100%);
@@ -364,47 +331,7 @@
             color: #ec4899;
         }
 
-        /* Impact Section */
-        .impact-section {
-            padding: 6rem 2rem;
-            background: linear-gradient(135deg, #ec4899 0%, #8b5cf6 50%, #06b6d4 100%);
-            color: white;
-            text-align: center;
-        }
-
-        .impact-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 3rem;
-            margin-top: 3rem;
-        }
-
-        .impact-item {
-            background: rgba(255, 255, 255, 0.15);
-            backdrop-filter: blur(20px);
-            padding: 2.5rem;
-            border-radius: 20px;
-            border: 2px solid rgba(255, 255, 255, 0.2);
-            transition: all 0.4s ease;
-        }
-
-        .impact-item:hover {
-            transform: translateY(-10px);
-            background: rgba(255, 255, 255, 0.25);
-        }
-
-        .impact-amount {
-            font-size: 2rem;
-            font-weight: 700;
-            margin-bottom: 0.5rem;
-            color: #fbbf24;
-        }
-
-        .impact-description {
-            font-size: 1.1rem;
-            opacity: 0.95;
-        }
-
+        
         
         /* Button Styles */
         .btn {
@@ -501,9 +428,7 @@
                 padding: 2rem;
             }
 
-            .till-number .number {
-                font-size: 2rem;
-            }
+           
         }
     </style>
 </head>
@@ -544,64 +469,7 @@
             <div class="container">
                 <h2 class="section-title">Ways to Support JANALISU</h2>
                 
-                <div class="options-grid">
-                    <!-- M-Pesa Donation -->
-                    <div class="option-card fade-in">
-                        <div class="option-icon">📱</div>
-                        <h3>M-Pesa Donation</h3>
-                        <p>Make a quick and secure donation using M-Pesa. Your contribution will directly support our education sponsorship and sports programs.</p>
-                        
-                        <div class="mpesa-instructions">
-                            <div style="text-align: center; margin-bottom: 2rem;">
-                                <div style="background: #22c55e; color: white; padding: 1rem; border-radius: 10px; display: inline-block;">
-                                    <strong>M-PESA</strong>
-                                </div>
-                            </div>
-                            
-                            <div class="till-number">
-                                <h4>Send Money to Till Number:</h4>
-                                <div class="number">5834629</div>
-                                <p style="margin-top: 0.5rem; opacity: 0.9;">JANALISU EMPOWERMENT GROUP</p>
-                            </div>
-                            
-                            <h4 style="margin-bottom: 1rem; color: #1f2937;">How to Send Money:</h4>
-                            
-                            <div class="instruction-step">
-                                <div class="step-number">1</div>
-                                <div class="step-text">Go to M-PESA menu on your phone</div>
-                            </div>
-                            
-                            <div class="instruction-step">
-                                <div class="step-number">2</div>
-                                <div class="step-text">Select "Lipa na M-PESA" → "Buy Goods and Services"</div>
-                            </div>
-                            
-                            <div class="instruction-step">
-                                <div class="step-number">3</div>
-                                <div class="step-text">Enter Till Number: <strong>5834629</strong></div>
-                            </div>
-                            
-                            <div class="instruction-step">
-                                <div class="step-number">4</div>
-                                <div class="step-text">Enter the amount you wish to donate</div>
-                            </div>
-                            
-                            <div class="instruction-step">
-                                <div class="step-number">5</div>
-                                <div class="step-text">Enter your M-PESA PIN to complete the transaction</div>
-                            </div>
-                            
-                            <div class="instruction-step">
-                                <div class="step-number">6</div>
-                                <div class="step-text">You will receive a confirmation SMS for your donation</div>
-                            </div>
-                            
-                            <div style="background: rgba(34, 197, 94, 0.1); padding: 1.5rem; border-radius: 10px; margin-top: 2rem; text-align: center;">
-                                <p style="color: #166534; font-weight: 600;">💚 Thank you for your generous support!</p>
-                                <p style="color: #166534; margin-top: 0.5rem;">Your donation will make a real difference in a girl's life.</p>
-                            </div>
-                        </div>
-                    </div>
+              
 
                     <!-- Physical Support -->
                     <div class="option-card fade-in">
@@ -661,36 +529,7 @@
             </div>
         </section>
 
-        <!-- Impact Section -->
-        <section class="impact-section">
-            <div class="container">
-                <h2 class="section-title" style="color: white;">Your Impact</h2>
-                <p style="font-size: 1.2rem; margin-bottom: 2rem; opacity: 0.95;">See how your donation transforms lives and communities</p>
-                
-                <div class="impact-grid">
-                    <div class="impact-item">
-                        <div class="impact-amount">KSh 500</div>
-                        <div class="impact-description">Provides sports equipment for one girl for a month</div>
-                    </div>
-                    <div class="impact-item">
-                        <div class="impact-amount">KSh 2,000</div>
-                        <div class="impact-description">Covers school supplies and materials for one term</div>
-                    </div>
-                    <div class="impact-item">
-                        <div class="impact-amount">KSh 5,000</div>
-                        <div class="impact-description">Sponsors one girl's education for a full term</div>
-                    </div>
-                    <div class="impact-item">
-                        <div class="impact-amount">KSh 15,000</div>
-                        <div class="impact-description">Supports a complete education sponsorship for one year</div>
-                    </div>
-                </div>
-                
-                <div style="margin-top: 3rem;">
-                    <a href="home.php" class="btn btn-secondary">Learn More About Our Work</a>
-                </div>
-            </div>
-        </section>
+        
     </main>
 
     

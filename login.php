@@ -1,20 +1,14 @@
 <?php
 require_once 'config.php';
 
-// Check if database connection exists
-if (!isset($pdo)) {
-    die("Database connection not established. Please check config.php");
-}
-
 // Check if user is already logged in
-if (isset($_SESSION['employee_id'])) {
+if (isset($_SESSION['admin_id'])) {
     header('Location: admin_dashboard.php');
     exit();
 }
 
 $error_message = '';
 $success_message = '';
-$email = '';
 
 // Handle login form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -30,52 +24,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         try {
             // Check if user exists and get user data
-            $stmt = $pdo->prepare("SELECT employee_id, first_name, last_name, email, password, position, department, status FROM employees WHERE email = ?");
-            if (!$stmt) {
-                throw new Exception("Failed to prepare SQL statement");
-            }
-            
-            $executed = $stmt->execute([$email]);
-            if (!$executed) {
-                throw new Exception("Failed to execute SQL statement");
-            }
-            
+            $stmt = $pdo->prepare("SELECT admin_id, first_name, last_name, email, password, position, department, status FROM admins WHERE email = ?");
+            $stmt->execute([$email]);
             $user = $stmt->fetch(PDO::FETCH_ASSOC);
             
             if ($user && password_verify($password, $user['password'])) {
                 // Check if account is active
                 if ($user['status'] !== 'Active') {
-                    $error_message = 'Your account has been deactivated. Please contact an administrator.';
+                    $error_message = 'Your account is not active. Please contact the administrator.';
                 } else {
-                    // Login successful
-                    $_SESSION['employee_id'] = $user['employee_id'];
-                    $_SESSION['first_name'] = $user['first_name'];
-                    $_SESSION['last_name'] = $user['last_name'];
-                    $_SESSION['email'] = $user['email'];
-                    $_SESSION['position'] = $user['position'];
-                    $_SESSION['department'] = $user['department'];
-                    $_SESSION['full_name'] = $user['first_name'] . ' ' . $user['last_name'];
+                    // Login successful - set session variables
+                    $_SESSION['admin_id'] = $user['admin_id'];
+                    $_SESSION['admin_email'] = $user['email'];
+                    $_SESSION['admin_name'] = $user['first_name'] . ' ' . $user['last_name'];
+                    $_SESSION['admin_position'] = $user['position'];
+                    $_SESSION['admin_department'] = $user['department'];
+                    $_SESSION['login_time'] = time();
                     
-                    try {
-                        // Update last login time
-                        $update_stmt = $pdo->prepare("UPDATE employees SET last_login = NOW() WHERE employee_id = ?");
-                        $update_stmt->execute([$user['employee_id']]);
+                    // Update last login
+                    $updateStmt = $pdo->prepare("UPDATE admins SET last_login = NOW() WHERE admin_id = ?");
+                    $updateStmt->execute([$user['admin_id']]);
+                    
+                    // Handle remember me functionality
+                    if ($remember_me) {
+                        $token = bin2hex(random_bytes(32));
+                        $expires = time() + (30 * 24 * 60 * 60); // 30 days
                         
-                        // Handle remember me functionality
-                        if ($remember_me) {
-                            $token = bin2hex(random_bytes(32));
-                            $expires = time() + (30 * 24 * 60 * 60); // 30 days
-                            
-                            // Store token in database
-                            $token_stmt = $pdo->prepare("INSERT INTO remember_tokens (employee_id, token, expires_at) VALUES (?, ?, FROM_UNIXTIME(?)) ON DUPLICATE KEY UPDATE token = VALUES(token), expires_at = VALUES(expires_at)");
-                            $token_stmt->execute([$user['employee_id'], hash('sha256', $token), $expires]);
-                            
-                            // Set cookie
-                            setcookie('remember_token', $token, $expires, '/', '', true, true);
-                        }
-                    } catch (PDOException $e) {
-                        error_log("Database error during login update: " . $e->getMessage());
-                        // Continue with login even if update fails
+                        // Store token in database
+                        $tokenStmt = $pdo->prepare("INSERT INTO remember_tokens (admin_id, token, expires_at) VALUES (?, ?, FROM_UNIXTIME(?)) ON DUPLICATE KEY UPDATE token = VALUES(token), expires_at = VALUES(expires_at)");
+                        $tokenStmt->execute([$user['admin_id'], hash('sha256', $token), $expires]);
+                        
+                        // Set cookie
+                        setcookie('remember_token', $token, $expires, '/', '', true, true);
                     }
                     
                     // Return JSON response for AJAX requests
@@ -90,14 +70,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             } else {
                 $error_message = 'Invalid email or password.';
-                error_log("Failed login attempt for email: " . $email . " from IP: " . $_SERVER['REMOTE_ADDR']);
             }
         } catch (PDOException $e) {
-            error_log("Database error: " . $e->getMessage());
-            $error_message = 'Database error occurred. Please try again later.';
-        } catch (Exception $e) {
-            error_log("Error: " . $e->getMessage());
-            $error_message = 'An error occurred. Please try again.';
+            $error_message = 'Login failed. Please try again later.';
+            error_log("Login error: " . $e->getMessage());
         }
     }
     
@@ -110,7 +86,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // Check for success message from registration
 if (isset($_GET['registered']) && $_GET['registered'] === 'success') {
-    $success_message = 'Registration successful! Please login with your credentials.';
+    $success_message = 'Registration successful! You can now login with your credentials.';
 }
 ?>
 <!DOCTYPE html>
@@ -331,10 +307,6 @@ if (isset($_GET['registered']) && $_GET['registered'] === 'success') {
             transform: translateY(-2px);
         }
 
-        .password-container {
-            position: relative;
-        }
-
         .password-toggle {
             position: absolute;
             right: 15px;
@@ -355,12 +327,14 @@ if (isset($_GET['registered']) && $_GET['registered'] === 'success') {
             justify-content: space-between;
             align-items: center;
             margin-bottom: 2rem;
+            font-size: 0.9rem;
         }
 
         .remember-me {
             display: flex;
             align-items: center;
             gap: 0.5rem;
+            color: #64748b;
         }
 
         .remember-me input[type="checkbox"] {
@@ -370,17 +344,10 @@ if (isset($_GET['registered']) && $_GET['registered'] === 'success') {
             cursor: pointer;
         }
 
-        .remember-me label {
-            color: #64748b;
-            font-size: 0.9rem;
-            cursor: pointer;
-        }
-
         .forgot-password {
             color: #ec4899;
             text-decoration: none;
-            font-size: 0.9rem;
-            font-weight: 500;
+            font-weight: 600;
             transition: color 0.3s ease;
         }
 
@@ -427,12 +394,6 @@ if (isset($_GET['registered']) && $_GET['registered'] === 'success') {
 
         .login-btn:active {
             transform: translateY(-1px);
-        }
-
-        .login-btn:disabled {
-            opacity: 0.7;
-            cursor: not-allowed;
-            transform: none;
         }
 
         .register-link {
@@ -500,47 +461,32 @@ if (isset($_GET['registered']) && $_GET['registered'] === 'success') {
             100% { transform: rotate(360deg); }
         }
 
-        /* Social Login Section */
         .social-login {
-            margin-top: 2rem;
-            padding-top: 2rem;
-            border-top: 1px solid #e2e8f0;
-        }
-
-        .social-title {
+            margin: 2rem 0;
             text-align: center;
-            color: #64748b;
-            margin-bottom: 1rem;
-            font-size: 0.9rem;
         }
 
-        .social-buttons {
-            display: flex;
-            gap: 1rem;
+        .divider {
+            position: relative;
+            text-align: center;
+            margin: 2rem 0;
         }
 
-        .social-btn {
-            flex: 1;
-            padding: 0.8rem;
-            border: 2px solid #e2e8f0;
-            border-radius: 10px;
+        .divider::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: #e2e8f0;
+        }
+
+        .divider span {
             background: white;
+            padding: 0 1rem;
             color: #64748b;
-            text-decoration: none;
-            text-align: center;
-            font-weight: 500;
-            transition: all 0.3s ease;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0.5rem;
-        }
-
-        .social-btn:hover {
-            border-color: #ec4899;
-            color: #ec4899;
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(236, 72, 153, 0.1);
+            font-size: 0.9rem;
         }
 
         /* Responsive */
@@ -600,10 +546,6 @@ if (isset($_GET['registered']) && $_GET['registered'] === 'success') {
             .login-card {
                 padding: 1.5rem;
             }
-
-            .social-buttons {
-                flex-direction: column;
-            }
         }
     </style>
 </head>
@@ -652,23 +594,23 @@ if (isset($_GET['registered']) && $_GET['registered'] === 'success') {
             <form id="loginForm" method="POST" action="">
                 <div class="form-group">
                     <label for="email" class="form-label">Email Address <span class="required">*</span></label>
-                    <input type="email" id="email" name="email" class="form-input" value="<?php echo htmlspecialchars($email ?? ''); ?>" required placeholder="Enter your email">
+                    <input type="email" id="email" name="email" class="form-input" value="<?php echo htmlspecialchars($email ?? ''); ?>" required autocomplete="email">
                 </div>
                 
                 <div class="form-group">
                     <label for="password" class="form-label">Password <span class="required">*</span></label>
-                    <div class="password-container">
-                        <input type="password" id="password" name="password" class="form-input" required placeholder="Enter your password">
+                    <div style="position: relative;">
+                        <input type="password" id="password" name="password" class="form-input" required autocomplete="current-password">
                         <span class="password-toggle" onclick="togglePassword('password')">👁️</span>
                     </div>
                 </div>
                 
                 <div class="form-options">
-                    <div class="remember-me">
-                        <input type="checkbox" id="remember_me" name="remember_me">
-                        <label for="remember_me">Remember me</label>
-                    </div>
-                    <a href="forgot_password.php" class="forgot-password">Forgot password?</a>
+                    <label class="remember-me">
+                        <input type="checkbox" name="remember_me" id="remember_me">
+                        Remember me
+                    </label>
+                    <a href="forgot_password.php" class="forgot-password">Forgot Password?</a>
                 </div>
                 
                 <button type="submit" class="login-btn">
@@ -678,20 +620,7 @@ if (isset($_GET['registered']) && $_GET['registered'] === 'success') {
             </form>
             
             <div class="register-link">
-                Don't have an account? <a href="register.php">Create Account</a>
-            </div>
-            
-            <!-- Social Login Section -->
-            <div class="social-login">
-                <p class="social-title">Or continue with</p>
-                <div class="social-buttons">
-                    <a href="#" class="social-btn">
-                        <span>📧</span> Google
-                    </a>
-                    <a href="#" class="social-btn">
-                        <span>📘</span> Facebook
-                    </a>
-                </div>
+                Don't have an account? <a href="register.php">Join Our Team</a>
             </div>
         </div>
     </div>
@@ -792,6 +721,16 @@ if (isset($_GET['registered']) && $_GET['registered'] === 'success') {
             });
         });
 
+        // Auto-hide success message from URL parameter
+        setTimeout(() => {
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('registered') === 'success') {
+                // Remove the parameter from URL without refreshing
+                const newUrl = window.location.pathname;
+                window.history.replaceState({}, document.title, newUrl);
+            }
+        }, 5000);
+
         // Add floating animation to login card
         const loginCard = document.querySelector('.login-card');
         let floatDirection = 1;
@@ -807,33 +746,56 @@ if (isset($_GET['registered']) && $_GET['registered'] === 'success') {
             loginCard.style.transform = `translateY(${newY}px)`;
         }, 100);
 
-        // Auto-focus email field when page loads
+        // Handle form submission with AJAX (optional enhancement)
+        function submitLoginForm(formData) {
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', '', true);
+            xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+            
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === 4) {
+                    const loadingSpinner = document.getElementById('loadingSpinner');
+                    const submitBtn = document.querySelector('.login-btn');
+                    
+                    loadingSpinner.style.display = 'none';
+                    submitBtn.disabled = false;
+                    submitBtn.style.opacity = '1';
+                    
+                    try {
+                        const response = JSON.parse(xhr.responseText);
+                        if (response.success) {
+                            showSuccess(response.message);
+                            setTimeout(() => {
+                                window.location.href = response.redirect;
+                            }, 1000);
+                        } else {
+                            showError(response.message);
+                        }
+                    } catch (e) {
+                        showError('An error occurred. Please try again.');
+                    }
+                }
+            };
+            
+            xhr.send(formData);
+        }
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', function(e) {
+            // Enter key to submit form when focused on form elements
+            if (e.key === 'Enter' && (e.target.matches('.form-input') || e.target.matches('.login-btn'))) {
+                const form = document.getElementById('loginForm');
+                form.dispatchEvent(new Event('submit'));
+            }
+        });
+
+        // Focus on email field when page loads
         window.addEventListener('load', function() {
-            document.getElementById('email').focus();
-        });
-
-        // Handle Enter key press
-        document.addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                document.getElementById('loginForm').dispatchEvent(new Event('submit'));
+            const emailField = document.getElementById('email');
+            if (emailField && !emailField.value) {
+                emailField.focus();
             }
         });
-
-        // Caps Lock warning
-        document.getElementById('password').addEventListener('keyup', function(e) {
-            const capsLockOn = e.getModifierState && e.getModifierState('CapsLock');
-            if (capsLockOn) {
-                this.style.borderColor = '#f59e0b';
-                this.title = 'Caps Lock is on';
-            } else {
-                this.style.borderColor = '#e2e8f0';
-                this.title = '';
-            }
-        });
-
-        // Clear messages when user starts typing
-        document.getElementById('email').addEventListener('input', hideMessages);
-        document.getElementById('password').addEventListener('input', hideMessages);
     </script>
 </body>
 </html>

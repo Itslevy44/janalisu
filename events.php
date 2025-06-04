@@ -1,127 +1,80 @@
 <?php
-// Database connection (modify with your actual database credentials)
-$host = 'localhost';
-$dbname = 'janalisu';
-$username = 'root';
-$password = '';
+// Database connection - XAMPP default settings
+$servername = "localhost";
+$username = "root";
+$password = "";
+$dbname = "janalisu";
 
 try {
-    $pdo = new PDO("mysql:host=$host;dbname=$dbname", $username, $password);
+    $pdo = new PDO("mysql:host=$servername;dbname=$dbname", $username, $password);
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 } catch(PDOException $e) {
-    // For demo purposes, we'll use sample data if connection fails
-    $pdo = null;
+    die("Connection failed: " . $e->getMessage());
 }
 
-// Handle event registration
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'register') {
-    header('Content-Type: application/json');
-    
-    $eventId = $_POST['event_id'] ?? '';
-    $name = $_POST['name'] ?? '';
-    $email = $_POST['email'] ?? '';
-    $phone = $_POST['phone'] ?? '';
-    
-    // Validate required fields
-    if (empty($eventId) || empty($name) || empty($email)) {
-        echo json_encode(['success' => false, 'message' => 'All fields are required']);
-        exit;
-    }
-    
-    // Save registration to database and update participant count
-    if ($pdo) {
-        try {
-            // Check if event exists and has space
-            $stmt = $pdo->prepare("SELECT max_participants, current_participants FROM events WHERE id = ? AND status = 'active'");
-            $stmt->execute([$eventId]);
-            $event = $stmt->fetch(PDO::FETCH_ASSOC);
-            
-            if (!$event) {
-                echo json_encode(['success' => false, 'message' => 'Event not found or not active']);
-                exit;
-            }
-            
-            if ($event['current_participants'] >= $event['max_participants']) {
-                echo json_encode(['success' => false, 'message' => 'Event is fully booked']);
-                exit;
-            }
-            
-            // Check if user already registered
-            $stmt = $pdo->prepare("SELECT id FROM event_registrations WHERE event_id = ? AND email = ?");
-            $stmt->execute([$eventId, $email]);
-            if ($stmt->fetch()) {
-                echo json_encode(['success' => false, 'message' => 'You are already registered for this event']);
-                exit;
-            }
-            
-            // Register user
-            $stmt = $pdo->prepare("INSERT INTO event_registrations (event_id, name, email, phone, registered_at) VALUES (?, ?, ?, ?, NOW())");
-            $stmt->execute([$eventId, $name, $email, $phone]);
-            
-            // Update participant count
-            $stmt = $pdo->prepare("UPDATE events SET current_participants = current_participants + 1 WHERE id = ?");
-            $stmt->execute([$eventId]);
-            
-            echo json_encode(['success' => true, 'message' => 'Registration successful! We will contact you with more details.']);
-            exit;
-        } catch(PDOException $e) {
-            error_log("Database error: " . $e->getMessage());
-            echo json_encode(['success' => false, 'message' => 'Registration failed. Please try again.']);
-            exit;
-        }
-    }
-    
-    echo json_encode(['success' => false, 'message' => 'Database connection failed']);
-    exit;
+// Filter parameters
+$event_type_filter = isset($_GET['type']) ? $_GET['type'] : '';
+$status_filter = isset($_GET['status']) ? $_GET['status'] : '';
+$search_query = isset($_GET['search']) ? trim($_GET['search']) : '';
+
+// Build the SQL query with filters
+$sql = "SELECT * FROM events WHERE 1=1";
+$params = [];
+
+if (!empty($event_type_filter)) {
+    $sql .= " AND event_type = ?";
+    $params[] = $event_type_filter;
 }
 
-// Get events for display
-function getEvents() {
-    global $pdo;
-    
-    // If database is available, use it
-    if ($pdo) {
-        try {
-            $stmt = $pdo->query("SELECT * FROM events WHERE status = 'active' AND event_date >= CURDATE() ORDER BY event_date ASC");
-            return $stmt->fetchAll(PDO::FETCH_ASSOC);
-        } catch(PDOException $e) {
-            error_log("Database error: " . $e->getMessage());
-            // Fall back to sample data
-        }
-    }
-    
-    // Sample data for demo if database connection fails
-    return [
-        [
-            'id' => 1,
-            'title' => 'Community Health Workshop',
-            'description' => 'A comprehensive workshop focusing on preventive healthcare and wellness education for community members.',
-            'event_date' => '2025-06-15',
-            'event_time' => '10:00',
-            'location' => 'Community Center, Nairobi',
-            'max_participants' => 50,
-            'current_participants' => 23,
-            'status' => 'active',
-            'image_url' => 'https://via.placeholder.com/600x300/ec4899/ffffff?text=Health+Workshop',
-            'created_at' => '2025-05-20'
-        ],
-        [
-            'id' => 2,
-            'title' => 'Women Empowerment Summit',
-            'description' => 'Annual summit bringing together women leaders, entrepreneurs, and activists.',
-            'event_date' => '2025-07-10',
-            'event_time' => '09:00',
-            'location' => 'Kenyatta International Conference Centre',
-            'max_participants' => 200,
-            'current_participants' => 87,
-            'status' => 'active',
-            'image_url' => 'https://via.placeholder.com/600x300/8b5cf6/ffffff?text=Women+Summit',
-            'created_at' => '2025-05-18'
-        ]
-    ];
+if (!empty($status_filter)) {
+    $sql .= " AND status = ?";
+    $params[] = $status_filter;
 }
 
-$events = getEvents();
+if (!empty($search_query)) {
+    $sql .= " AND (event_title LIKE ? OR description LIKE ? OR location LIKE ?)";
+    $search_param = "%$search_query%";
+    $params[] = $search_param;
+    $params[] = $search_param;
+    $params[] = $search_param;
+}
+
+$sql .= " ORDER BY event_date ASC, event_time ASC";
+
+try {
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    $events = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch(PDOException $e) {
+    $events = [];
+    $error_message = "Error fetching events: " . $e->getMessage();
+}
+
+// Get unique event types for filter dropdown
+try {
+    $type_stmt = $pdo->query("SELECT DISTINCT event_type FROM events WHERE event_type IS NOT NULL AND event_type != '' ORDER BY event_type");
+    $event_types = $type_stmt->fetchAll(PDO::FETCH_COLUMN);
+} catch(PDOException $e) {
+    $event_types = [];
+}
+
+// Separate events by status for better organization
+$upcoming_events = [];
+$ongoing_events = [];
+$completed_events = [];
+
+foreach ($events as $event) {
+    $event_date = strtotime($event['event_date']);
+    $today = strtotime(date('Y-m-d'));
+    
+    if ($event['status'] === 'Ongoing') {
+        $ongoing_events[] = $event;
+    } elseif ($event['status'] === 'Completed' || $event_date < $today) {
+        $completed_events[] = $event;
+    } else {
+        $upcoming_events[] = $event;
+    }
+}
 ?>
 
 <!DOCTYPE html>
@@ -129,8 +82,9 @@ $events = getEvents();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Events - JANALISU EMPOWERMENT GROUP</title>
+    <title>JANALISU - Upcoming Events</title>
     <style>
+        
         * {
             margin: 0;
             padding: 0;
@@ -141,8 +95,8 @@ $events = getEvents();
             font-family: 'Arial', sans-serif;
             line-height: 1.6;
             color: #333;
-            background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
-            min-height: 100vh;
+            overflow-x: hidden;
+            background: #f8fafc;
         }
 
         /* Header and Navigation */
@@ -155,6 +109,7 @@ $events = getEvents();
             z-index: 1000;
             padding: 1rem 0;
             box-shadow: 0 4px 30px rgba(236, 72, 153, 0.1);
+            transition: all 0.3s ease;
         }
 
         nav {
@@ -166,38 +121,38 @@ $events = getEvents();
             padding: 0 2rem;
         }
 
-       .logo-container {
-    display: flex;
-    align-items: center;
-    gap: 15px;
-}
+        .logo-container {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
 
-.logo-image {
-    width: 80px;           /* Increased size */
-    height: 80px;          /* Same as width for perfect circle */
-    border-radius: 50%;    /* Makes it perfectly round */
-    object-fit: cover;     /* Ensures image fills the circle properly */
-    border: 3px solid transparent;
-    background: linear-gradient(white, white) padding-box,
-                linear-gradient(135deg, #ec4899 0%, #8b5cf6 50%, #06b6d4 100%) border-box;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-    transition: transform 0.3s ease, box-shadow 0.3s ease;
-}
+        .logo-image {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 3px solid transparent;
+            background: linear-gradient(white, white) padding-box,
+                        linear-gradient(135deg, #ec4899 0%, #8b5cf6 50%, #06b6d4 100%) border-box;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
 
-.logo-image:hover {
-    transform: scale(1.05);
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
-}
+        .logo-image:hover {
+            transform: scale(1.05);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+        }
 
-.logo-text {
-    font-size: 1.8rem;
-    font-weight: bold;
-    background: linear-gradient(135deg, #ec4899 0%, #8b5cf6 50%, #06b6d4 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    margin: 0;
-}
+        .logo-text {
+            font-size: 1.8rem;
+            font-weight: bold;
+            background: linear-gradient(135deg, #ec4899 0%, #8b5cf6 50%, #06b6d4 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin: 0;
+        }
 
         .nav-menu {
             display: flex;
@@ -209,23 +164,29 @@ $events = getEvents();
             text-decoration: none;
             color: #333;
             font-weight: 500;
-            transition: color 0.3s ease;
+            transition: all 0.3s ease;
             position: relative;
         }
 
-        .nav-menu a:hover,
-        .nav-menu a.active {
+        .nav-menu a:hover {
             color: #ec4899;
+            transform: translateY(-2px);
         }
 
-        .nav-menu a.active::after {
+        .nav-menu a::after {
             content: '';
             position: absolute;
+            width: 0;
+            height: 3px;
             bottom: -5px;
             left: 0;
-            width: 100%;
-            height: 2px;
             background: linear-gradient(135deg, #ec4899 0%, #8b5cf6 100%);
+            transition: width 0.3s ease;
+            border-radius: 2px;
+        }
+
+        .nav-menu a:hover::after {
+            width: 100%;
         }
 
         .mobile-menu {
@@ -237,52 +198,137 @@ $events = getEvents();
         .bar {
             width: 25px;
             height: 3px;
-            background: #333;
+            background: #ec4899;
             margin: 3px 0;
             transition: 0.3s;
+            border-radius: 2px;
         }
 
-        /* Hero Section */
-        .hero {
-            background: linear-gradient(135deg, rgba(236, 72, 153, 0.9) 0%, rgba(139, 92, 246, 0.9) 100%), url('https://via.placeholder.com/1920x600/333333/ffffff?text=Events+Banner') center/cover;
-            color: white;
-            padding: 150px 0 100px;
+        /* Hero Section for Events Page */
+        .hero-section {
+            padding: 140px 2rem 80px;
+            background: linear-gradient(135deg, rgba(236, 72, 153, 0.9) 0%, rgba(139, 92, 246, 0.8) 50%, rgba(6, 182, 212, 0.9) 100%);
             text-align: center;
+            color: white;
+            position: relative;
+            overflow: hidden;
         }
 
-        .hero-content {
-            max-width: 800px;
+        .hero-section::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grid" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M 10 0 L 0 0 0 10" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="0.5"/></pattern></defs><rect width="100" height="100" fill="url(%23grid)"/></svg>');
+            opacity: 0.3;
+        }
+
+        .hero-title {
+            font-size: 4rem;
+            font-weight: 800;
+            margin-bottom: 1rem;
+            text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.3);
+            background: linear-gradient(45deg, #fff 0%, #f8fafc 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            position: relative;
+            z-index: 2;
+        }
+
+        .hero-subtitle {
+            font-size: 1.3rem;
+            opacity: 0.95;
+            max-width: 700px;
+            margin: 0 auto;
+            text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.2);
+            position: relative;
+            z-index: 2;
+        }
+
+        /* Filter Section */
+        .filter-section {
+            background: white;
+            padding: 3rem 2rem;
+            box-shadow: 0 4px 25px rgba(0, 0, 0, 0.1);
+            margin-bottom: 3rem;
+        }
+
+        .filter-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr auto;
+            gap: 2rem;
+            max-width: 1200px;
+            margin: 0 auto;
+            align-items: end;
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .filter-label {
+            font-weight: 600;
+            color: #374151;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .filter-input,
+        .filter-select {
+            padding: 0.875rem 1rem;
+            border: 2px solid #e5e7eb;
+            border-radius: 12px;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            background: white;
+        }
+
+        .filter-input:focus,
+        .filter-select:focus {
+            outline: none;
+            border-color: #ec4899;
+            box-shadow: 0 0 0 3px rgba(236, 72, 153, 0.1);
+        }
+
+        .filter-btn {
+            padding: 0.875rem 2rem;
+            background: linear-gradient(135deg, #ec4899 0%, #8b5cf6 100%);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(236, 72, 153, 0.3);
+        }
+
+        .filter-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(236, 72, 153, 0.4);
+        }
+
+        /* Container */
+        .container {
+            max-width: 1200px;
             margin: 0 auto;
             padding: 0 2rem;
         }
 
-        .hero h1 {
-            font-size: 3.5rem;
-            font-weight: 800;
-            margin-bottom: 1rem;
-        }
-
-        .hero p {
-            font-size: 1.3rem;
-            margin-bottom: 2rem;
-            opacity: 0.9;
-        }
-
-        /* Main Content */
-        .main-container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 4rem 2rem;
-        }
-
+        /* Section Headers */
         .section-header {
             text-align: center;
-            margin-bottom: 4rem;
+            margin-bottom: 3rem;
         }
 
         .section-title {
             font-size: 2.5rem;
-            font-weight: 700;
+            font-weight: 800;
             background: linear-gradient(135deg, #ec4899 0%, #8b5cf6 50%, #06b6d4 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
@@ -291,66 +337,10 @@ $events = getEvents();
         }
 
         .section-subtitle {
-            font-size: 1.2rem;
-            color: #64748b;
+            font-size: 1.1rem;
+            color: #6b7280;
             max-width: 600px;
             margin: 0 auto;
-        }
-
-        /* Filter Bar */
-        .filter-bar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 3rem;
-            flex-wrap: wrap;
-            gap: 1rem;
-        }
-
-        .search-box {
-            display: flex;
-            align-items: center;
-            background: white;
-            border-radius: 15px;
-            padding: 0.5rem 1rem;
-            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
-            flex: 1;
-            max-width: 400px;
-        }
-
-        .search-box input {
-            border: none;
-            outline: none;
-            flex: 1;
-            padding: 0.5rem;
-            font-size: 1rem;
-        }
-
-        .search-icon {
-            color: #64748b;
-            margin-right: 0.5rem;
-        }
-
-        .filter-buttons {
-            display: flex;
-            gap: 1rem;
-        }
-
-        .filter-btn {
-            padding: 0.5rem 1rem;
-            border: 2px solid #e2e8f0;
-            background: white;
-            border-radius: 25px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            font-weight: 500;
-        }
-
-        .filter-btn:hover,
-        .filter-btn.active {
-            border-color: #ec4899;
-            background: #ec4899;
-            color: white;
         }
 
         /* Events Grid */
@@ -361,393 +351,362 @@ $events = getEvents();
             margin-bottom: 4rem;
         }
 
+        /* Event Cards */
         .event-card {
             background: white;
             border-radius: 20px;
             overflow: hidden;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+            transition: all 0.4s ease;
             position: relative;
-            opacity: 1;
-            transform: translateY(0);
+            transform: translateY(20px);
+            opacity: 0;
         }
 
         .event-card:hover {
-            transform: translateY(-10px);
-            box-shadow: 0 20px 50px rgba(236, 72, 153, 0.15);
+            transform: translateY(-8px);
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
         }
 
         .event-image {
             width: 100%;
-            height: 250px;
+            height: 200px;
             object-fit: cover;
-            display: block;
+            background: linear-gradient(135deg, #ec4899 0%, #8b5cf6 50%, #06b6d4 100%);
         }
 
         .event-content {
-            padding: 2rem;
+            padding: 1.5rem;
         }
 
         .event-title {
             font-size: 1.4rem;
             font-weight: 700;
-            color: #1e293b;
+            color: #1f2937;
             margin-bottom: 1rem;
             line-height: 1.3;
         }
 
-        .event-description {
-            color: #64748b;
-            margin-bottom: 1.5rem;
-            display: -webkit-box;
-            -webkit-line-clamp: 3;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
-        }
-
         .event-meta {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 1rem;
-            margin-bottom: 1.5rem;
-            font-size: 0.9rem;
-        }
-
-        .meta-item {
             display: flex;
-            align-items: center;
+            flex-direction: column;
             gap: 0.5rem;
-            color: #64748b;
-        }
-
-        .meta-icon {
-            font-size: 1.1rem;
-        }
-
-        .event-stats {
-            background: #f8fafc;
-            padding: 1rem;
-            border-radius: 12px;
-            margin-bottom: 1.5rem;
-        }
-
-        .participants-info {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 0.5rem;
-        }
-
-        .participants-count {
-            font-weight: 600;
-            color: #1e293b;
-        }
-
-        .spots-left {
-            font-size: 0.9rem;
-            color: #dc2626;
-            font-weight: 500;
-        }
-
-        .progress-bar {
-            width: 100%;
-            height: 6px;
-            background: #e2e8f0;
-            border-radius: 3px;
-            overflow: hidden;
-        }
-
-        .progress-fill {
-            height: 100%;
-            background: linear-gradient(135deg, #ec4899 0%, #8b5cf6 100%);
-        }
-
-        .event-date {
-            position: absolute;
-            top: 1rem;
-            right: 1rem;
-            background: rgba(255, 255, 255, 0.95);
-            padding: 0.5rem;
-            border-radius: 10px;
-            text-align: center;
-            font-weight: 600;
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
-        }
-
-        .date-day {
-            font-size: 1.5rem;
-            color: #ec4899;
-            line-height: 1;
-        }
-
-        .date-month {
-            font-size: 0.8rem;
-            color: #64748b;
-            text-transform: uppercase;
-        }
-
-        .register-btn {
-            width: 100%;
-            background: linear-gradient(135deg, #ec4899 0%, #8b5cf6 100%);
-            color: white;
-            padding: 1rem;
-            border: none;
-            border-radius: 12px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            font-size: 1rem;
-        }
-
-        .register-btn:hover:not(:disabled) {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(236, 72, 153, 0.4);
-        }
-
-        .register-btn:disabled {
-            background: #9ca3af;
-            cursor: not-allowed;
-            transform: none;
-        }
-
-        /* Modal Styles */
-        .modal {
-            display: none;
-            position: fixed;
-            z-index: 2000;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.7);
-            backdrop-filter: blur(5px);
-        }
-
-        .modal-content {
-            background-color: white;
-            margin: 5% auto;
-            padding: 0;
-            border-radius: 20px;
-            width: 90%;
-            max-width: 500px;
-            max-height: 90vh;
-            overflow: hidden;
-            transform: scale(0.7);
-            opacity: 0;
-            transition: all 0.3s ease;
-        }
-
-        .modal.show .modal-content {
-            transform: scale(1);
-            opacity: 1;
-        }
-
-        .modal-header {
-            background: linear-gradient(135deg, #ec4899 0%, #8b5cf6 100%);
-            color: white;
-            padding: 1.5rem 2rem;
-            position: relative;
-        }
-
-        .modal-title {
-            font-size: 1.5rem;
-            font-weight: 700;
-            margin: 0;
-        }
-
-        .close {
-            position: absolute;
-            right: 1.5rem;
-            top: 50%;
-            transform: translateY(-50%);
-            color: white;
-            font-size: 2rem;
-            font-weight: bold;
-            cursor: pointer;
-            transition: opacity 0.3s ease;
-        }
-
-        .close:hover {
-            opacity: 0.7;
-        }
-
-        .modal-body {
-            padding: 2rem;
-        }
-
-        .form-group {
-            margin-bottom: 1.5rem;
-        }
-
-        .form-label {
-            display: block;
-            margin-bottom: 0.5rem;
-            color: #374151;
-            font-weight: 600;
-        }
-
-        .form-input {
-            width: 100%;
-            padding: 0.8rem 1rem;
-            border: 2px solid #e5e7eb;
-            border-radius: 10px;
-            font-size: 1rem;
-            transition: border-color 0.3s ease;
-        }
-
-        .form-input:focus {
-            outline: none;
-            border-color: #ec4899;
-            box-shadow: 0 0 0 3px rgba(236, 72, 153, 0.1);
-        }
-
-        .modal-footer {
-            background: #f8fafc;
-            padding: 1.5rem 2rem;
-            display: flex;
-            justify-content: flex-end;
-            gap: 1rem;
-        }
-
-        .btn {
-            padding: 0.8rem 1.5rem;
-            border: none;
-            border-radius: 10px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: transform 0.3s ease;
-        }
-
-        .btn-secondary {
-            background: #e5e7eb;
-            color: #374151;
-        }
-
-        .btn-primary {
-            background: linear-gradient(135deg, #ec4899 0%, #8b5cf6 100%);
-            color: white;
-        }
-
-        .btn:hover {
-            transform: translateY(-2px);
-        }
-
-        /* Messages */
-        .alert {
-            padding: 1rem;
-            border-radius: 10px;
             margin-bottom: 1rem;
         }
 
-        .alert-success {
-            background: #dcfce7;
-            color: #16a34a;
-            border-left: 4px solid #16a34a;
+        .event-meta-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.9rem;
+            color: #6b7280;
         }
 
-        .alert-error {
-            background: #fee2e2;
-            color: #dc2626;
-            border-left: 4px solid #dc2626;
+        .event-meta-icon {
+            font-size: 1rem;
         }
 
-        /* Loading Animation */
-        .loading {
-            display: none;
-            width: 20px;
-            height: 20px;
-            border: 2px solid transparent;
-            border-top: 2px solid currentColor;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin-left: 10px;
+        .event-description {
+            color: #6b7280;
+            line-height: 1.6;
+            margin-bottom: 1.5rem;
         }
 
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+        .event-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        /* Event Status */
+        .event-status {
+            padding: 0.4rem 1rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .status-scheduled {
+            background: rgba(59, 130, 246, 0.1);
+            color: #3b82f6;
+        }
+
+        .status-ongoing {
+            background: rgba(16, 185, 129, 0.1);
+            color: #10b981;
+        }
+
+        .status-completed {
+            background: rgba(107, 114, 128, 0.1);
+            color: #6b7280;
+        }
+
+        .participants-info {
+            font-size: 0.85rem;
+            color: #6b7280;
+            font-weight: 500;
+        }
+
+        /* Badges */
+        .new-badge,
+        .urgent-badge {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            padding: 0.4rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            z-index: 10;
+        }
+
+        .new-badge {
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            color: white;
+        }
+
+        .urgent-badge {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            color: white;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
         }
 
         /* Empty State */
         .empty-state {
             text-align: center;
             padding: 4rem 2rem;
-            color: #64748b;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
         }
 
         .empty-state-icon {
             font-size: 4rem;
             margin-bottom: 1rem;
-            opacity: 0.5;
         }
 
-        .empty-state h3 {
-            font-size: 1.5rem;
-            margin-bottom: 0.5rem;
+        .empty-state-title {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: #374151;
+            margin-bottom: 1rem;
+        }
+
+        .empty-state-subtitle {
+            color: #6b7280;
+            font-size: 1.1rem;
+        }
+
+        /* Footer */
+        footer {
+            background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+            color: white;
+            padding: 4rem 2rem 1rem;
+            position: relative;
+            margin-top: 6rem;
+        }
+
+        footer::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(135deg, #ec4899 0%, #8b5cf6 50%, #06b6d4 100%);
+        }
+
+        .footer-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 3rem;
+        }
+
+        .footer-section h3 {
+            background: linear-gradient(135deg, #ec4899 0%, #06b6d4 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 1.5rem;
+            font-size: 1.4rem;
+            font-weight: 700;
+        }
+
+        .footer-section p, .footer-section a {
+            color: #cbd5e1;
+            text-decoration: none;
+            margin-bottom: 0.8rem;
+            display: block;
+            transition: color 0.3s ease;
+        }
+
+        .footer-section a:hover {
+            color: #ec4899;
+        }
+
+        .footer-bottom {
+            text-align: center;
+            margin-top: 3rem;
+            padding-top: 2rem;
+            border-top: 1px solid #475569;
+            color: #94a3b8;
         }
 
         /* Responsive Design */
+        @media (max-width: 1024px) {
+            .filter-grid {
+                grid-template-columns: 1fr 1fr;
+                gap: 1.5rem;
+            }
+            
+            .filter-grid .filter-group:first-child {
+                grid-column: 1 / -1;
+            }
+        }
+
         @media (max-width: 768px) {
             .nav-menu {
-                display: none;
+                position: fixed;
+                left: -100%;
+                top: 70px;
+                flex-direction: column;
+                background-color: rgba(255, 255, 255, 0.98);
+                backdrop-filter: blur(20px);
+                width: 100%;
+                text-align: center;
+                transition: 0.3s;
+                box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+                padding: 2rem 0;
+            }
+
+            .nav-menu.active {
+                left: 0;
             }
 
             .mobile-menu {
                 display: flex;
             }
 
-            .hero h1 {
+            .hero-title {
                 font-size: 2.5rem;
             }
 
-            .hero p {
+            .hero-subtitle {
                 font-size: 1.1rem;
             }
 
-            .main-container {
-                padding: 2rem 1rem;
+            .filter-grid {
+                grid-template-columns: 1fr;
+                gap: 1rem;
             }
 
             .events-grid {
                 grid-template-columns: 1fr;
             }
 
-            .filter-bar {
+            .section-title {
+                font-size: 2rem;
+            }
+
+            .logo-text {
+                font-size: 1.4rem;
+            }
+
+            .logo-image {
+                width: 60px;
+                height: 60px;
+            }
+
+            .event-footer {
                 flex-direction: column;
-                align-items: stretch;
+                align-items: flex-start;
+                gap: 0.5rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .container {
+                padding: 0 1rem;
             }
 
-            .search-box {
-                max-width: none;
-                margin-bottom: 1rem;
+            .filter-section {
+                padding: 2rem 1rem;
             }
 
-            .event-meta {
+            .hero-section {
+                padding: 120px 1rem 60px;
+            }
+
+            .events-grid {
                 grid-template-columns: 1fr;
+                gap: 1.5rem;
             }
 
-            .modal-content {
-                margin: 10% auto;
-                width: 95%;
-            }
-
-            .modal-body {
-                padding: 1.5rem;
+            .event-card {
+                margin: 0;
             }
         }
 
-        /* Hide filtered events smoothly */
-        .event-card.hidden {
-            display: none !important;
+        /* Animation Classes */
+        .fade-in {
+            animation: fadeInUp 0.8s ease forwards;
         }
 
-        .event-card.visible {
-            display: block !important;
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
+
+        /* Loading States */
+        .filter-btn:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        /* Utility Classes */
+        .text-center { text-align: center; }
+        .mb-2 { margin-bottom: 0.5rem; }
+        .mb-4 { margin-bottom: 1rem; }
+        .mt-4 { margin-top: 1rem; }
+        .p-4 { padding: 1rem; }
+
+        /* Print Styles */
+        @media print {
+            header, .filter-section, footer {
+                display: none;
+            }
+            
+            .event-card {
+                break-inside: avoid;
+                box-shadow: none;
+                border: 1px solid #ddd;
+            }
+        }
+
     </style>
 </head>
 <body>
-    <!-- Header -->
+   <!-- Header -->
     <header>
         <nav>
             <div class="logo-container">
@@ -757,7 +716,7 @@ $events = getEvents();
 
             <ul class="nav-menu">
                 <li><a href="home.php">Home</a></li>
-                <li><a href="events.php" class="active">Events</a></li>
+                <li><a href="events.php">Events</a></li>
                 <li><a href="donate.php">Donate</a></li>
                 <li><a href="login.php">Login</a></li>
             </ul>
@@ -770,466 +729,353 @@ $events = getEvents();
     </header>
 
     <!-- Hero Section -->
-    <section class="hero">
-        <div class="hero-content">
-            <h1>Upcoming Events</h1>
-            <p>Join us in making a difference in our community. Discover upcoming workshops, seminars, and empowerment programs designed to uplift and inspire.</p>
-        </div>
+    <section class="hero-section">
+        <h1 class="hero-title">Upcoming Events</h1>
+        <p class="hero-subtitle">
+            Join us in making a difference in our community. Discover upcoming workshops, 
+            seminars, and empowerment programs designed to uplift and inspire.
+        </p>
     </section>
 
-    <!-- Main Content -->
-    <div class="main-container">
-        <!-- Messages -->
-        <div id="messageContainer"></div>
-
-        <!-- Section Header -->
-        <div class="section-header">
-            <h2 class="section-title">Featured Events</h2>
-            <p class="section-subtitle">Be part of transformative experiences that empower individuals and strengthen our community</p>
-        </div>
-
-        <!-- Filter Bar -->
-        <div class="filter-bar">
-            <div class="search-box">
-                <span class="search-icon">🔍</span>
-                <input type="text" id="searchInput" placeholder="Search events..." onkeyup="filterEvents()">
+    <!-- Filter Section -->
+    <div class="filter-section">
+        <form method="GET" class="filter-grid">
+            <div class="filter-group">
+                <label class="filter-label">Search Events</label>
+                <input type="text" name="search" class="filter-input" placeholder="Search by title, description, or location..." value="<?php echo htmlspecialchars($search_query); ?>">
             </div>
-            <div class="filter-buttons">
-                <button class="filter-btn active" onclick="filterByCategory('all')">All Events</button>
-                <button class="filter-btn" onclick="filterByCategory('workshop')">Workshops</button>
-                <button class="filter-btn" onclick="filterByCategory('summit')">Summits</button>
-                <button class="filter-btn" onclick="filterByCategory('program')">Programs</button>
+            
+            <div class="filter-group">
+                <label class="filter-label">Event Type</label>
+                <select name="type" class="filter-select">
+                    <option value="">All Types</option>
+                    <?php foreach ($event_types as $type): ?>
+                        <option value="<?php echo htmlspecialchars($type); ?>" <?php echo ($event_type_filter === $type) ? 'selected' : ''; ?>>
+                            <?php echo htmlspecialchars($type); ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
             </div>
-        </div>
+            
+            <div class="filter-group">
+                <label class="filter-label">Status</label>
+                <select name="status" class="filter-select">
+                    <option value="">All Status</option>
+                    <option value="Scheduled" <?php echo ($status_filter === 'Scheduled') ? 'selected' : ''; ?>>Scheduled</option>
+                    <option value="Ongoing" <?php echo ($status_filter === 'Ongoing') ? 'selected' : ''; ?>>Ongoing</option>
+                    <option value="Completed" <?php echo ($status_filter === 'Completed') ? 'selected' : ''; ?>>Completed</option>
+                </select>
+            </div>
+            
+            <div class="filter-group">
+                <button type="submit" class="filter-btn">🔍 Filter Events</button>
+            </div>
+        </form>
+    </div>
 
-        <!-- Events Grid -->
-        <div class="events-grid" id="eventsGrid">
-            <?php if (empty($events)): ?>
-                <div class="empty-state">
-                    <div class="empty-state-icon">📅</div>
-                    <h3>No Events Available</h3>
-                    <p>Check back soon for upcoming events and workshops!</p>
-                </div>
-            <?php else: ?>
-                <?php foreach ($events as $event): ?>
-                    <?php
-                    $eventDate = new DateTime($event['event_date']);
-                    $spotsLeft = $event['max_participants'] - $event['current_participants'];
-                    $progressPercentage = ($event['current_participants'] / $event['max_participants']) * 100;
-                    ?>
-                    <div class="event-card visible" data-event-id="<?php echo $event['id']; ?>" data-category="<?php echo strtolower(explode(' ', $event['title'])[count(explode(' ', $event['title']))-1]); ?>">
-                        <!-- Event Date Badge -->
-                        <div class="event-date">
-                            <div class="date-day"><?php echo $eventDate->format('d'); ?></div>
-                            <div class="date-month"><?php echo $eventDate->format('M'); ?></div>
-                        </div>
-
-                        <img src="<?php echo htmlspecialchars($event['image_url']); ?>" alt="<?php echo htmlspecialchars($event['title']); ?>" class="event-image" onerror="this.src='https://via.placeholder.com/600x300/ec4899/ffffff?text=Event+Image'" loading="lazy">
+    <div class="container">
+        <!-- Ongoing Events -->
+        <?php if (!empty($ongoing_events)): ?>
+            <div class="section-header">
+                <h2 class="section-title">🔥 Happening Now</h2>
+                <p class="section-subtitle">Events currently taking place</p>
+            </div>
+            
+            <div class="events-grid">
+                <?php foreach ($ongoing_events as $event): ?>
+                    <div class="event-card">
+                        <div class="urgent-badge">Live Now</div>
+                        
+                        <?php if (!empty($event['image']) && file_exists($event['image'])): ?>
+                            <img src="<?php echo htmlspecialchars($event['image']); ?>" alt="Event Image" class="event-image">
+                        <?php else: ?>
+                            <div class="event-image" style="display: flex; align-items: center; justify-content: center; color: white; font-size: 3rem;">
+                                📅
+                            </div>
+                        <?php endif; ?>
                         
                         <div class="event-content">
-                            <h3 class="event-title"><?php echo htmlspecialchars($event['title']); ?></h3>
-                            <p class="event-description"><?php echo htmlspecialchars($event['description']); ?></p>
+                            <h3 class="event-title"><?php echo htmlspecialchars($event['event_title']); ?></h3>
                             
                             <div class="event-meta">
-                                <div class="meta-item">
-                                    <span class="meta-icon">📅</span>
-                                    <span><?php echo $eventDate->format('M d, Y'); ?></span>
+                                <div class="event-meta-item">
+                                    <span class="event-meta-icon">📅</span>
+                                    <span><?php echo date('M j, Y', strtotime($event['event_date'])); ?></span>
                                 </div>
-                                <div class="meta-item">
-                                    <span class="meta-icon">🕐</span>
+                                <div class="event-meta-item">
+                                    <span class="event-meta-icon">⏰</span>
                                     <span><?php echo date('g:i A', strtotime($event['event_time'])); ?></span>
                                 </div>
-                                <div class="meta-item">
-                                    <span class="meta-icon">📍</span>
+                                <div class="event-meta-item">
+                                    <span class="event-meta-icon">📍</span>
                                     <span><?php echo htmlspecialchars($event['location']); ?></span>
                                 </div>
-                                <div class="meta-item">
-                                    <span class="meta-icon">👥</span>
-                                    <span><?php echo $event['max_participants']; ?> capacity</span>
-                                </div>
+                                <?php if (!empty($event['event_type'])): ?>
+                                    <div class="event-meta-item">
+                                        <span class="event-meta-icon">🏷️</span>
+                                        <span><?php echo htmlspecialchars($event['event_type']); ?></span>
+                                    </div>
+                                <?php endif; ?>
                             </div>
                             
-                            <div class="event-stats">
-                                <div class="participants-info">
-                                    <span class="participants-count"><?php echo $event['current_participants']; ?> / <?php echo $event['max_participants']; ?> registered</span>
-                                    <?php if ($spotsLeft > 0): ?>
-                                        <span class="spots-left"><?php echo $spotsLeft; ?> spots left</span>
-                                    <?php else: ?>
-                                        <span class="spots-left">Fully booked</span>
-                                    <?php endif; ?>
-                                </div>
-                                <div class="progress-bar">
-                                    <div class="progress-fill" style="width: <?php echo $progressPercentage; ?>%"></div>
-                                </div>
-                            </div>
-                            
-                            <?php if ($spotsLeft > 0): ?>
-                                <button class="register-btn" onclick="openRegistrationModal(<?php echo $event['id']; ?>, '<?php echo htmlspecialchars($event['title']); ?>')">Register Now
-                                </button>
-                            <?php else: ?>
-                                <button class="register-btn" disabled>
-                                    Event Full
-                                </button>
+                            <?php if (!empty($event['description'])): ?>
+                                <p class="event-description">
+                                    <?php echo htmlspecialchars(substr($event['description'], 0, 150)); ?>
+                                    <?php if (strlen($event['description']) > 150) echo '...'; ?>
+                                </p>
                             <?php endif; ?>
+                            
+                            <div class="event-footer">
+                                <span class="event-status status-<?php echo strtolower($event['status']); ?>">
+                                    <?php echo htmlspecialchars($event['status']); ?>
+                                </span>
+                                
+                                <?php if (!empty($event['max_participants'])): ?>
+                                    <span class="participants-info">
+                                        Max: <?php echo $event['max_participants']; ?> participants
+                                    </span>
+                                <?php endif; ?>
+                            </div>
                         </div>
                     </div>
                 <?php endforeach; ?>
-            <?php endif; ?>
-        </div>
-    </div>
+            </div>
+        <?php endif; ?>
 
-    <!-- Registration Modal -->
-    <div id="registrationModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 class="modal-title" id="modalTitle">Event Registration</h3>
-                <span class="close" onclick="closeRegistrationModal()">&times;</span>
+        <!-- Upcoming Events -->
+        <?php if (!empty($upcoming_events)): ?>
+            <div class="section-header">
+                <h2 class="section-title">📅 Featured Events</h2>
+                <p class="section-subtitle">Be part of transformative experiences that empower individuals and strengthen our community</p>
             </div>
-            <div class="modal-body">
-                <div id="modalMessages"></div>
-                <form id="registrationForm">
-                    <input type="hidden" id="eventId" name="event_id">
-                    <input type="hidden" name="action" value="register">
-                    
-                    <div class="form-group">
-                        <label for="name" class="form-label">Full Name *</label>
-                       <input type="text" id="name" name="name" class="form-input" required>
+            
+            <div class="events-grid">
+                <?php foreach ($upcoming_events as $index => $event): ?>
+                    <div class="event-card" style="animation-delay: <?php echo $index * 0.1; ?>s;">
+                        <?php 
+                        $days_until = ceil((strtotime($event['event_date']) - time()) / (60 * 60 * 24));
+                        if ($days_until <= 7 && $days_until > 0): 
+                        ?>
+                            <div class="new-badge">Soon</div>
+                        <?php endif; ?>
+                        
+                        <?php if (!empty($event['image']) && file_exists($event['image'])): ?>
+                            <img src="<?php echo htmlspecialchars($event['image']); ?>" alt="Event Image" class="event-image">
+                        <?php else: ?>
+                            <div class="event-image" style="display: flex; align-items: center; justify-content: center; color: white; font-size: 3rem;">
+                                📅
+                            </div>
+                        <?php endif; ?>
+                        
+                        <div class="event-content">
+                            <h3 class="event-title"><?php echo htmlspecialchars($event['event_title']); ?></h3>
+                            
+                            <div class="event-meta">
+                                <div class="event-meta-item">
+                                    <span class="event-meta-icon">📅</span>
+                                    <span><?php echo date('M j, Y', strtotime($event['event_date'])); ?></span>
+                                </div>
+                                <div class="event-meta-item">
+                                    <span class="event-meta-icon">⏰</span>
+                                    <span><?php echo date('g:i A', strtotime($event['event_time'])); ?></span>
+                                </div>
+                                <div class="event-meta-item">
+                                    <span class="event-meta-icon">📍</span>
+                                    <span><?php echo htmlspecialchars($event['location']); ?></span>
+                                </div>
+                                <?php if (!empty($event['event_type'])): ?>
+                                    <div class="event-meta-item">
+                                        <span class="event-meta-icon">🏷️</span>
+                                        <span><?php echo htmlspecialchars($event['event_type']); ?></span>
+                                    </div>
+                                <?php endif; ?>
+                            </div>
+                            
+                            <?php if (!empty($event['description'])): ?>
+                                <p class="event-description">
+                                    <?php echo htmlspecialchars(substr($event['description'], 0, 150)); ?>
+                                    <?php if (strlen($event['description']) > 150) echo '...'; ?>
+                                </p>
+                            <?php endif; ?>
+                            
+                            <div class="event-footer">
+                                <span class="event-status status-<?php echo strtolower($event['status']); ?>">
+                                    <?php echo htmlspecialchars($event['status']); ?>
+                                </span>
+                                
+                                <?php if (!empty($event['max_participants'])): ?>
+                                    <span class="participants-info">
+                                        Max: <?php echo $event['max_participants']; ?> participants
+                                    </span>
+                                <?php endif; ?>
+                            </div>
+                        </div>
                     </div>
-                    
-                    <div class="form-group">
-                        <label for="email" class="form-label">Email Address *</label>
-                        <input type="email" id="email" name="email" class="form-input" required>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="phone" class="form-label">Phone Number</label>
-                        <input type="tel" id="phone" name="phone" class="form-input" placeholder="+254 700 000 000">
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="comments" class="form-label">Additional Comments (optional)</label>
-                        <textarea id="comments" name="comments" class="form-input" rows="3" placeholder="Any special requirements or questions?"></textarea>
-                    </div>
-                </form>
+                <?php endforeach; ?>
             </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" onclick="closeRegistrationModal()">Cancel</button>
-                <button type="submit" form="registrationForm" class="btn btn-primary" id="submitBtn">
-                    Register
-                    <span class="loading" id="loadingSpinner"></span>
-                </button>
+        <?php endif; ?>
+
+        <!-- Past Events -->
+        <?php if (!empty($completed_events)): ?>
+            <div class="section-header">
+                <h2 class="section-title">📚 Past Events</h2>
+                <p class="section-subtitle">Celebrating our community achievements and memories</p>
             </div>
-        </div>
+            
+            <div class="events-grid">
+                <?php foreach ($completed_events as $event): ?>
+                    <div class="event-card" style="opacity: 0.8;">
+                        <?php if (!empty($event['image']) && file_exists($event['image'])): ?>
+                            <img src="<?php echo htmlspecialchars($event['image']); ?>" alt="Event Image" class="event-image">
+                        <?php else: ?>
+                            <div class="event-image" style="display: flex; align-items: center; justify-content: center; color: white; font-size: 3rem;">
+                                📅
+                            </div>
+                        <?php endif; ?>
+                        
+                        <div class="event-content">
+                            <h3 class="event-title"><?php echo htmlspecialchars($event['event_title']); ?></h3>
+                            
+                            <div class="event-meta">
+                                <div class="event-meta-item">
+                                    <span class="event-meta-icon">📅</span>
+                                    <span><?php echo date('M j, Y', strtotime($event['event_date'])); ?></span>
+                                </div>
+                                <div class="event-meta-item">
+                                    <span class="event-meta-icon">⏰</span>
+                                    <span><?php echo date('g:i A', strtotime($event['event_time'])); ?></span>
+                                </div>
+                                <div class="event-meta-item">
+                                    <span class="event-meta-icon">📍</span>
+                                    <span><?php echo htmlspecialchars($event['location']); ?></span>
+                                </div>
+                                <?php if (!empty($event['event_type'])): ?>
+                                    <div class="event-meta-item">
+                                        <span class="event-meta-icon">🏷️</span>
+                                        <span><?php echo htmlspecialchars($event['event_type']); ?></span>
+                                    </div>
+                                <?php endif; ?>
+                            </div>
+                            
+                            <?php if (!empty($event['description'])): ?>
+                                <p class="event-description">
+                                    <?php echo htmlspecialchars(substr($event['description'], 0, 150)); ?>
+                                    <?php if (strlen($event['description']) > 150) echo '...'; ?>
+                                </p>
+                            <?php endif; ?>
+                            
+                            <div class="event-footer">
+                                <span class="event-status status-<?php echo strtolower($event['status']); ?>">
+                                    <?php echo htmlspecialchars($event['status']); ?>
+                                </span>
+                                
+                                <?php if (!empty($event['max_participants'])): ?>
+                                    <span class="participants-info">
+                                        Max: <?php echo $event['max_participants']; ?> participants
+                                    </span>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        <?php endif; ?>
+
+        <!-- Empty State -->
+        <?php if (empty($events)): ?>
+            <div class="empty-state">
+                <div class="empty-state-icon">📅</div>
+                <h3 class="empty-state-title">No Events Found</h3>
+                <p class="empty-state-subtitle">
+                    <?php if (!empty($search_query) || !empty($event_type_filter) || !empty($status_filter)): ?>
+                        Try adjusting your search criteria or filters to find more events.
+                    <?php else: ?>
+                        Stay tuned! New events will be posted here soon.
+                    <?php endif; ?>
+                </p>
+            </div>
+        <?php endif; ?>
     </div>
 
     <script>
-        // Global variables
-        let currentEvents = [];
-        let allEvents = [];
-
-        // Initialize events data
+        // Smooth scrolling animation for cards
         document.addEventListener('DOMContentLoaded', function() {
-            // Get events data from PHP
-            allEvents = <?php echo json_encode($events); ?>;
-            currentEvents = [...allEvents];
-        });
-
-        // Registration Modal Functions
-        function openRegistrationModal(eventId, eventTitle) {
-            const modal = document.getElementById('registrationModal');
-            const modalTitle = document.getElementById('modalTitle');
-            const eventIdInput = document.getElementById('eventId');
+            const cards = document.querySelectorAll('.event-card');
             
-            modalTitle.textContent = `Register for: ${eventTitle}`;
-            eventIdInput.value = eventId;
-            
-            // Clear form
-            document.getElementById('registrationForm').reset();
-            document.getElementById('modalMessages').innerHTML = '';
-            
-            modal.style.display = 'block';
-            setTimeout(() => {
-                modal.classList.add('show');
-            }, 10);
-        }
-
-        function closeRegistrationModal() {
-            const modal = document.getElementById('registrationModal');
-            modal.classList.remove('show');
-            setTimeout(() => {
-                modal.style.display = 'none';
-            }, 300);
-        }
-
-        // Close modal when clicking outside
-        window.onclick = function(event) {
-            const modal = document.getElementById('registrationModal');
-            if (event.target === modal) {
-                closeRegistrationModal();
-            }
-        }
-
-        // Form submission
-        document.getElementById('registrationForm').addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            const submitBtn = document.getElementById('submitBtn');
-            const loadingSpinner = document.getElementById('loadingSpinner');
-            const modalMessages = document.getElementById('modalMessages');
-            
-            // Show loading state
-            submitBtn.disabled = true;
-            loadingSpinner.style.display = 'inline-block';
-            modalMessages.innerHTML = '';
-            
-            // Get form data
-            const formData = new FormData(this);
-            
-            // Submit registration
-            fetch(window.location.href, {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                // Hide loading state
-                submitBtn.disabled = false;
-                loadingSpinner.style.display = 'none';
-                
-                if (data.success) {
-                    modalMessages.innerHTML = `<div class="alert alert-success">${data.message}</div>`;
-                    
-                    // Reset form
-                    document.getElementById('registrationForm').reset();
-                    
-                    // Update participant count in UI
-                    updateEventParticipantCount(formData.get('event_id'));
-                    
-                    // Close modal after 2 seconds
-                    setTimeout(() => {
-                        closeRegistrationModal();
-                        showMessage(data.message, 'success');
-                    }, 2000);
-                } else {
-                    modalMessages.innerHTML = `<div class="alert alert-error">${data.message}</div>`;
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                submitBtn.disabled = false;
-                loadingSpinner.style.display = 'none';
-                modalMessages.innerHTML = '<div class="alert alert-error">Registration failed. Please try again.</div>';
-            });
-        });
-
-        // Update participant count in the UI
-        function updateEventParticipantCount(eventId) {
-            const eventCard = document.querySelector(`[data-event-id="${eventId}"]`);
-            if (eventCard) {
-                const participantsInfo = eventCard.querySelector('.participants-count');
-                const spotsLeft = eventCard.querySelector('.spots-left');
-                const progressFill = eventCard.querySelector('.progress-fill');
-                const registerBtn = eventCard.querySelector('.register-btn');
-                
-                // Find the event in our data
-                const event = allEvents.find(e => e.id == eventId);
-                if (event) {
-                    event.current_participants += 1;
-                    const newSpotsLeft = event.max_participants - event.current_participants;
-                    const newProgressPercentage = (event.current_participants / event.max_participants) * 100;
-                    
-                    // Update UI elements
-                    participantsInfo.textContent = `${event.current_participants} / ${event.max_participants} registered`;
-                    progressFill.style.width = `${newProgressPercentage}%`;
-                    
-                    if (newSpotsLeft > 0) {
-                        spotsLeft.textContent = `${newSpotsLeft} spots left`;
-                    } else {
-                        spotsLeft.textContent = 'Fully booked';
-                        registerBtn.textContent = 'Event Full';
-                        registerBtn.disabled = true;
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        entry.target.style.opacity = '1';
+                        entry.target.style.transform = 'translateY(0)';
                     }
-                }
-            }
-        }
+                });
+            }, {
+                threshold: 0.1,
+                rootMargin: '0px 0px -50px 0px'
+            });
 
-        // Show message in main container
-        function showMessage(message, type) {
-            const messageContainer = document.getElementById('messageContainer');
-            const alertClass = type === 'success' ? 'alert-success' : 'alert-error';
-            messageContainer.innerHTML = `<div class="alert ${alertClass}">${message}</div>`;
-            
-            // Auto-hide after 5 seconds
-            setTimeout(() => {
-                messageContainer.innerHTML = '';
-            }, 5000);
-        }
+            cards.forEach(card => {
+                observer.observe(card);
+            });
+        });
 
-        // Filter Events Functions
-        function filterEvents() {
-            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
-            const eventCards = document.querySelectorAll('.event-card');
-            let visibleCount = 0;
-            
-            eventCards.forEach(card => {
-                const title = card.querySelector('.event-title').textContent.toLowerCase();
-                const description = card.querySelector('.event-description').textContent.toLowerCase();
-                const location = card.querySelector('.meta-item:nth-child(3) span:last-child').textContent.toLowerCase();
-                
-                const isVisible = title.includes(searchTerm) || 
-                                description.includes(searchTerm) || 
-                                location.includes(searchTerm);
-                
-                if (isVisible) {
-                    card.classList.remove('hidden');
-                    card.classList.add('visible');
-                    visibleCount++;
+        // Auto-clear filters button
+        function clearFilters() {
+            const form = document.querySelector('.filter-section form');
+            const inputs = form.querySelectorAll('input, select');
+            inputs.forEach(input => {
+                if (input.type === 'text') {
+                    input.value = '';
                 } else {
-                    card.classList.remove('visible');
-                    card.classList.add('hidden');
+                    input.selectedIndex = 0;
                 }
             });
-            
-            // Show empty state if no results
-            showEmptyState(visibleCount === 0 && searchTerm !== '');
+            form.submit();
         }
 
-        function filterByCategory(category) {
-            // Update active filter button
-            document.querySelectorAll('.filter-btn').forEach(btn => {
-                btn.classList.remove('active');
-            });
-            event.target.classList.add('active');
-            
-            const eventCards = document.querySelectorAll('.event-card');
-            let visibleCount = 0;
-            
-            eventCards.forEach(card => {
-                const cardCategory = card.getAttribute('data-category');
-                const isVisible = category === 'all' || cardCategory.includes(category);
-                
-                if (isVisible) {
-                    card.classList.remove('hidden');
-                    card.classList.add('visible');
-                    visibleCount++;
-                } else {
-                    card.classList.remove('visible');
-                    card.classList.add('hidden');
-                }
-            });
-            
-            // Show empty state if no results
-            showEmptyState(visibleCount === 0 && category !== 'all');
-        }
-
-        function showEmptyState(show) {
-            const eventsGrid = document.getElementById('eventsGrid');
-            let emptyState = document.querySelector('.empty-state');
-            
-            if (show && !emptyState) {
-                emptyState = document.createElement('div');
-                emptyState.className = 'empty-state';
-                emptyState.innerHTML = `
-                    <div class="empty-state-icon">🔍</div>
-                    <h3>No Events Found</h3>
-                    <p>Try adjusting your search or filter criteria</p>
-                `;
-                eventsGrid.appendChild(emptyState);
-            } else if (!show && emptyState) {
-                emptyState.remove();
-            }
-        }
-
-        // Mobile Menu Toggle
-        document.querySelector('.mobile-menu').addEventListener('click', function() {
-            const navMenu = document.querySelector('.nav-menu');
-            navMenu.style.display = navMenu.style.display === 'flex' ? 'none' : 'flex';
-        });
-
-        // Smooth scroll for internal links
-        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-            anchor.addEventListener('click', function (e) {
+        // Add clear filters button if filters are active
+        if (window.location.search) {
+            const filterSection = document.querySelector('.filter-section');
+            const clearBtn = document.createElement('button');
+                        clearBtn.textContent = '❌ Clear Filters';
+            clearBtn.className = 'filter-btn';
+            clearBtn.style.marginLeft = '10px';
+            clearBtn.style.background = 'linear-gradient(135deg, #666, #333)';
+            clearBtn.onclick = function(e) {
                 e.preventDefault();
-                const target = document.querySelector(this.getAttribute('href'));
-                if (target) {
-                    target.scrollIntoView({
-                        behavior: 'smooth',
-                        block: 'start'
-                    });
+                clearFilters();
+            };
+            
+            const formGroup = document.querySelector('.filter-grid .filter-group:last-child');
+            formGroup.style.display = 'flex';
+            formGroup.style.alignItems = 'center';
+            formGroup.appendChild(clearBtn);
+        }
+
+        // Enhance form submission with loading state
+        const form = document.querySelector('.filter-section form');
+        if (form) {
+            form.addEventListener('submit', function() {
+                const submitBtn = form.querySelector('button[type="submit"]');
+                if (submitBtn) {
+                    submitBtn.innerHTML = '⏳ Loading...';
+                    submitBtn.disabled = true;
                 }
             });
-        });
-
-        // Add scroll effect to header
-        window.addEventListener('scroll', function() {
-            const header = document.querySelector('header');
-            if (window.scrollY > 100) {
-                header.style.background = 'rgba(255, 255, 255, 0.98)';
-                header.style.boxShadow = '0 4px 30px rgba(236, 72, 153, 0.15)';
-            } else {
-                header.style.background = 'rgba(255, 255, 255, 0.95)';
-                header.style.boxShadow = '0 4px 30px rgba(236, 72, 153, 0.1)';
-            }
-        });
-
-        // Form validation
-        function validateForm() {
-            const name = document.getElementById('name').value.trim();
-            const email = document.getElementById('email').value.trim();
-            
-            if (!name) {
-                showFormError('Please enter your full name');
-                return false;
-            }
-            
-            if (!email) {
-                showFormError('Please enter your email address');
-                return false;
-            }
-            
-            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-            if (!emailRegex.test(email)) {
-                showFormError('Please enter a valid email address');
-                return false;
-            }
-            
-            return true;
         }
 
-        function showFormError(message) {
-            const modalMessages = document.getElementById('modalMessages');
-            modalMessages.innerHTML = `<div class="alert alert-error">${message}</div>`;
-        }
-
-        // Add form validation to submit event
-        document.getElementById('registrationForm').addEventListener('submit', function(e) {
-            if (!validateForm()) {
-                e.preventDefault();
-                return;
-            }
-        });
-
-        // Real-time email validation
-        document.getElementById('email').addEventListener('blur', function() {
-            const email = this.value.trim();
-            if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-                this.style.borderColor = '#dc2626';
-                showFormError('Please enter a valid email address');
-            } else {
-                this.style.borderColor = '#e5e7eb';
-                document.getElementById('modalMessages').innerHTML = '';
-            }
-        });
-
-        // Auto-format phone number
-        document.getElementById('phone').addEventListener('input', function(e) {
-            let value = e.target.value.replace(/\D/g, '');
-            if (value.startsWith('254')) {
-                value = '+' + value;
-            } else if (value.startsWith('0')) {
-                value = '+254' + value.substring(1);
-            }
-            e.target.value = value;
+        // Add hover effects to cards programmatically
+        const cards = document.querySelectorAll('.event-card');
+        cards.forEach(card => {
+            card.addEventListener('mouseenter', function() {
+                this.style.boxShadow = '0 15px 35px rgba(0, 0, 0, 0.2)';
+                this.style.transform = 'translateY(-8px)';
+            });
+            
+            card.addEventListener('mouseleave', function() {
+                this.style.boxShadow = '0 10px 30px rgba(0, 0, 0, 0.15)';
+                this.style.transform = 'translateY(0)';
+            });
         });
     </script>
 </body>

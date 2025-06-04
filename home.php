@@ -681,10 +681,10 @@
                 </div>
                 <div class="rotating-images">
                     <div class="image-container">
-                        <img src="https://images.unsplash.com/photo-1544717297-fa95b6ee9643?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80" alt="Girls playing football" class="rotating-image active">
-                        <img src="https://images.unsplash.com/photo-1577036421869-7c8d388d2123?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80" alt="Girls in classroom" class="rotating-image">
-                        <img src="https://images.unsplash.com/photo-1509062522246-3755977927d7?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80" alt="Community meeting" class="rotating-image">
-                        <img src="https://images.unsplash.com/photo-1594736797933-d0401ba2fe65?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80" alt="Mentorship session" class="rotating-image">
+                        <img src="image1.jpg" alt="Girls playing football" class="rotating-image active">
+                        <img src="image2.jpg" alt="Community meeting" class="rotating-image">
+                        <img src="image1.jpg" alt="Girls in Classroom" class="rotating-image">
+                        <img src="image1.jpg" alt="Mentorship session" class="rotating-image">
                         <div class="image-overlay">
                             <h3 id="image-title">Empowering Through Sports</h3>
                             <p id="image-description">Building confidence and skills through football</p>

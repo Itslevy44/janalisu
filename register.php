@@ -2,7 +2,7 @@
 require_once 'config.php';
 
 // Check if user is already logged in
-if (isset($_SESSION['employee_id'])) {
+if (isset($_SESSION['admin_id'])) {
     header('Location: admin_dashboard.php');
     exit();
 }
@@ -35,8 +35,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error_message = 'First name and last name must be at least 2 characters long.';
     } else {
         try {
-            // Check if email already exists
-            $stmt = $pdo->prepare("SELECT employee_id FROM employees WHERE email = ?");
+            // Check if email already exists in admins table
+            $stmt = $pdo->prepare("SELECT admin_id FROM admins WHERE email = ?");
             $stmt->execute([$email]);
             
             if ($stmt->fetch()) {
@@ -45,9 +45,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // Hash the password
                 $hashed_password = password_hash($password, PASSWORD_DEFAULT);
                 
-                // Insert new employee
+                // Insert new admin
                 $stmt = $pdo->prepare("
-                    INSERT INTO employees (first_name, last_name, email, password, position, department, phone, address, status, created_at) 
+                    INSERT INTO admins (first_name, last_name, email, password, position, department, phone, address, status, created_at) 
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Active', NOW())
                 ");
                 
