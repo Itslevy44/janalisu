@@ -1,16 +1,5 @@
 <?php
-// Database connection - XAMPP default settings
-$servername = "localhost";
-$username = "root";
-$password = "";
-$dbname = "janalisu";
-
-try {
-    $pdo = new PDO("mysql:host=$servername;dbname=$dbname", $username, $password);
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-} catch(PDOException $e) {
-    die("Connection failed: " . $e->getMessage());
-}
+require_once 'config.php'; // Handles DB connection and session
 
 // Filter parameters
 $event_type_filter = isset($_GET['type']) ? $_GET['type'] : '';
@@ -41,6 +30,7 @@ if (!empty($search_query)) {
 
 $sql .= " ORDER BY event_date ASC, event_time ASC";
 
+// Fetch filtered events
 try {
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
@@ -50,7 +40,7 @@ try {
     $error_message = "Error fetching events: " . $e->getMessage();
 }
 
-// Get unique event types for filter dropdown
+// Get unique event types for dropdown
 try {
     $type_stmt = $pdo->query("SELECT DISTINCT event_type FROM events WHERE event_type IS NOT NULL AND event_type != '' ORDER BY event_type");
     $event_types = $type_stmt->fetchAll(PDO::FETCH_COLUMN);
@@ -58,7 +48,7 @@ try {
     $event_types = [];
 }
 
-// Separate events by status for better organization
+// Group events by status
 $upcoming_events = [];
 $ongoing_events = [];
 $completed_events = [];
@@ -66,7 +56,7 @@ $completed_events = [];
 foreach ($events as $event) {
     $event_date = strtotime($event['event_date']);
     $today = strtotime(date('Y-m-d'));
-    
+
     if ($event['status'] === 'Ongoing') {
         $ongoing_events[] = $event;
     } elseif ($event['status'] === 'Completed' || $event_date < $today) {
@@ -76,6 +66,7 @@ foreach ($events as $event) {
     }
 }
 ?>
+
 
 <!DOCTYPE html>
 <html lang="en">

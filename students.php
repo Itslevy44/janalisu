@@ -1,18 +1,5 @@
 <?php
-session_start();
-
-// Database connection
-$servername = "localhost";
-$username = "root";
-$password = "";
-$dbname = "janalisu";
-
-try {
-    $pdo = new PDO("mysql:host=$servername;dbname=$dbname", $username, $password);
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-} catch(PDOException $e) {
-    die("Connection failed: " . $e->getMessage());
-}
+require_once 'config.php'; // Includes session and DB connection
 
 // Handle form submission for adding new student
 $message = '';
@@ -59,12 +46,10 @@ if (isset($_GET['delete']) && is_numeric($_GET['delete'])) {
 // Handle status update
 if (isset($_GET['toggle_status']) && is_numeric($_GET['toggle_status'])) {
     try {
-        // Get current status
         $stmt = $pdo->prepare("SELECT status FROM students WHERE student_id = ?");
         $stmt->execute([$_GET['toggle_status']]);
         $current_status = $stmt->fetch(PDO::FETCH_ASSOC)['status'];
         
-        // Toggle status
         $new_status = ($current_status == 'Active') ? 'Inactive' : 'Active';
         
         $stmt = $pdo->prepare("UPDATE students SET status = ? WHERE student_id = ?");
@@ -79,9 +64,9 @@ if (isset($_GET['toggle_status']) && is_numeric($_GET['toggle_status'])) {
 }
 
 // Fetch all students with search and filter functionality
-$search = isset($_GET['search']) ? $_GET['search'] : '';
-$filter_status = isset($_GET['filter_status']) ? $_GET['filter_status'] : '';
-$filter_program = isset($_GET['filter_program']) ? $_GET['filter_program'] : '';
+$search = $_GET['search'] ?? '';
+$filter_status = $_GET['filter_status'] ?? '';
+$filter_program = $_GET['filter_program'] ?? '';
 
 $sql = "SELECT * FROM students WHERE 1=1";
 $params = [];
@@ -109,10 +94,8 @@ try {
     $stmt->execute($params);
     $students = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
-    // Get unique programs for filter dropdown
     $program_stmt = $pdo->query("SELECT DISTINCT program FROM students ORDER BY program");
     $programs = $program_stmt->fetchAll(PDO::FETCH_ASSOC);
-    
 } catch(PDOException $e) {
     $students = [];
     $programs = [];
@@ -120,6 +103,7 @@ try {
     $messageType = "error";
 }
 ?>
+
 
 <!DOCTYPE html>
 <html lang="en">

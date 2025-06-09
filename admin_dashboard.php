@@ -1,26 +1,12 @@
 <?php
-session_start();
+require_once 'config.php'; // Includes session and DB connection
 
-// Optional: Check if admin is logged in (uncomment when login system is ready)
+// Optional: Check if admin is logged in
 // if (!isset($_SESSION['admin_logged_in'])) {
 //     header('Location: login.php');
 //     exit();
 // }
 
-// Database connection - XAMPP default settings
-$servername = "localhost";
-$username = "root";
-$password = "";
-$dbname = "janalisu";
-
-try {
-    $pdo = new PDO("mysql:host=$servername;dbname=$dbname", $username, $password);
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-} catch(PDOException $e) {
-    die("Connection failed: " . $e->getMessage());
-}
-
-// Fetch statistics
 try {
     // Total students
     $stmt = $pdo->query("SELECT COUNT(*) as total_students FROM students");
@@ -38,7 +24,7 @@ try {
     $stmt = $pdo->query("SELECT COUNT(*) as active_staff FROM employees WHERE status = 'Active'");
     $active_staff = $stmt->fetch(PDO::FETCH_ASSOC)['active_staff'];
     
-    // Upcoming events (scheduled events)
+    // Upcoming events
     $stmt = $pdo->query("SELECT COUNT(*) as upcoming_events FROM events WHERE status = 'Scheduled' AND event_date >= CURDATE()");
     $upcoming_events = $stmt->fetch(PDO::FETCH_ASSOC)['upcoming_events'];
     
@@ -46,23 +32,30 @@ try {
     $stmt = $pdo->query("SELECT COUNT(*) as total_events FROM events");
     $total_events = $stmt->fetch(PDO::FETCH_ASSOC)['total_events'];
     
-    // Calculate success rate (completed events / total events)
+    // Completed events
     $stmt = $pdo->query("SELECT COUNT(*) as completed_events FROM events WHERE status = 'Completed'");
     $completed_events = $stmt->fetch(PDO::FETCH_ASSOC)['completed_events'];
     
+    // Success rate
     $success_rate = $total_events > 0 ? round(($completed_events / $total_events) * 100) : 0;
     
-    // Calculate monthly changes (comparison with previous month)
-    $stmt = $pdo->query("SELECT COUNT(*) as last_month_students FROM students WHERE MONTH(enrollment_date) = MONTH(CURDATE()) - 1 AND YEAR(enrollment_date) = YEAR(CURDATE())");
+    // Monthly student changes
+    $stmt = $pdo->query("SELECT COUNT(*) as last_month_students 
+                         FROM students 
+                         WHERE MONTH(enrollment_date) = MONTH(CURDATE()) - 1 
+                         AND YEAR(enrollment_date) = YEAR(CURDATE())");
     $last_month_students = $stmt->fetch(PDO::FETCH_ASSOC)['last_month_students'];
     
-    $stmt = $pdo->query("SELECT COUNT(*) as this_month_students FROM students WHERE MONTH(enrollment_date) = MONTH(CURDATE()) AND YEAR(enrollment_date) = YEAR(CURDATE())");
+    $stmt = $pdo->query("SELECT COUNT(*) as this_month_students 
+                         FROM students 
+                         WHERE MONTH(enrollment_date) = MONTH(CURDATE()) 
+                         AND YEAR(enrollment_date) = YEAR(CURDATE())");
     $this_month_students = $stmt->fetch(PDO::FETCH_ASSOC)['this_month_students'];
     
     $student_change = $this_month_students - $last_month_students;
     
 } catch(PDOException $e) {
-    // Set default values if database query fails
+    // Set defaults on error
     $total_students = 0;
     $active_students = 0;
     $total_staff = 0;
@@ -72,6 +65,7 @@ try {
     $student_change = 0;
 }
 ?>
+
 
 <!DOCTYPE html>
 <html lang="en">

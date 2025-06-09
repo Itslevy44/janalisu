@@ -1,31 +1,102 @@
 <?php
-session_start();
+// Include configuration file first
+require_once 'config.php';
 
-// Database connection
-$servername = "localhost";
-$username = "root";
-$password = "";
-$dbname = "janalisu";
-
-try {
-    $pdo = new PDO("mysql:host=$servername;dbname=$dbname", $username, $password);
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-} catch(PDOException $e) {
-    die("Connection failed: " . $e->getMessage());
+// Start session only if not already active
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
 }
 
-// Handle form submissions
+try {
+    // Create database connection using config constants
+    $pdo = new PDO(
+        "mysql:host=" . DB_HOST . ";dbname=" . DB_NAME . ";charset=utf8mb4",
+        DB_USER,
+        DB_PASS,
+        [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            PDO::ATTR_EMULATE_PREPARES => false
+        ]
+    );
+} catch(PDOException $e) {
+    die("Database connection failed: " . $e->getMessage());
+}
+
+// Initialize message variables
 $message = '';
 $message_type = '';
 
-if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    if (isset($_POST['action'])) {
-        try {
-            switch ($_POST['action']) {
-                case 'add':
-                    $stmt = $pdo->prepare("INSERT INTO employees (first_name, last_name, email, phone, position, department, salary, hire_date, status, address, password) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+// Handle form submissions
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
+    try {
+        switch ($_POST['action']) {
+            case 'add':
+                // Add new staff member
+                $stmt = $pdo->prepare("INSERT INTO employees (first_name, last_name, email, phone, position, department, salary, hire_date, status, address, password) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                $hashed_password = password_hash($_POST['password'], PASSWORD_DEFAULT);
+                $stmt->execute([
+                    $_POST['first_name'],
+                    $_POST['last_name'],
+                    $_POST['email'],
+                    $_POST['phone'],
+                    $_POST['position'],
+                    $_POST['department'],
+                    $_POST['salary'],
+                    $_POST['hire_date'],
+                    $_POST['status'],
+                    $_POST['address'],
+                    $hashed_password
+                ]);
+                $message = "Staff member added successfully!";
+                $message_type = "success";
+                break;
+                
+            case 'edit':
+                // Update existing staff member
+                $update_fields = [
+                    $_POST['first_name'],
+                    $_POST['last_name'],
+                    $_POST['email'],
+                    $_POST['phone'],
+                    $_POST['position'],
+                    $_POST['department'],
+                    $_POST['salary'],
+                    $_POST['hire_date'],
+                    $_POST['status'],
+                    $_POST['address'],
+                    $_POST['employee_id']
+                ];
+                
+                $sql = "UPDATE employees SET 
+                    first_name = ?, 
+                    last_name = ?, 
+                    email = ?, 
+                    phone = ?, 
+                    position = ?, 
+                    department = ?, 
+                    salary = ?, 
+                    hire_date = ?, 
+                    status = ?, 
+                    address = ? 
+                WHERE employee_id = ?";
+                
+                if (!empty($_POST['password'])) {
                     $hashed_password = password_hash($_POST['password'], PASSWORD_DEFAULT);
-                    $stmt->execute([
+                    $sql = "UPDATE employees SET 
+                        first_name = ?, 
+                        last_name = ?, 
+                        email = ?, 
+                        phone = ?, 
+                        position = ?, 
+                        department = ?, 
+                        salary = ?, 
+                        hire_date = ?, 
+                        status = ?, 
+                        address = ?,
+                        password = ? 
+                    WHERE employee_id = ?";
+                    $update_fields = [
                         $_POST['first_name'],
                         $_POST['last_name'],
                         $_POST['email'],
@@ -36,68 +107,38 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                         $_POST['hire_date'],
                         $_POST['status'],
                         $_POST['address'],
-                        $hashed_password
-                    ]);
-                    $message = "Staff member added successfully!";
-                    $message_type = "success";
-                    break;
-                    
-                case 'edit':
-                    if (!empty($_POST['password'])) {
-                        $hashed_password = password_hash($_POST['password'], PASSWORD_DEFAULT);
-                        $stmt = $pdo->prepare("UPDATE employees SET first_name=?, last_name=?, email=?, phone=?, position=?, department=?, salary=?, hire_date=?, status=?, address=?, password=? WHERE employee_id=?");
-                        $stmt->execute([
-                            $_POST['first_name'],
-                            $_POST['last_name'],
-                            $_POST['email'],
-                            $_POST['phone'],
-                            $_POST['position'],
-                            $_POST['department'],
-                            $_POST['salary'],
-                            $_POST['hire_date'],
-                            $_POST['status'],
-                            $_POST['address'],
-                            $hashed_password,
-                            $_POST['employee_id']
-                        ]);
-                    } else {
-                        $stmt = $pdo->prepare("UPDATE employees SET first_name=?, last_name=?, email=?, phone=?, position=?, department=?, salary=?, hire_date=?, status=?, address=? WHERE employee_id=?");
-                        $stmt->execute([
-                            $_POST['first_name'],
-                            $_POST['last_name'],
-                            $_POST['email'],
-                            $_POST['phone'],
-                            $_POST['position'],
-                            $_POST['department'],
-                            $_POST['salary'],
-                            $_POST['hire_date'],
-                            $_POST['status'],
-                            $_POST['address'],
-                            $_POST['employee_id']
-                        ]);
-                    }
-                    $message = "Staff member updated successfully!";
-                    $message_type = "success";
-                    break;
-                    
-                case 'delete':
-                    $stmt = $pdo->prepare("DELETE FROM employees WHERE employee_id = ?");
-                    $stmt->execute([$_POST['employee_id']]);
-                    $message = "Staff member deleted successfully!";
-                    $message_type = "success";
-                    break;
-            }
-        } catch(PDOException $e) {
-            $message = "Error: " . $e->getMessage();
-            $message_type = "error";
+                        $hashed_password,
+                        $_POST['employee_id']
+                    ];
+                }
+                
+                $stmt = $pdo->prepare($sql);
+                $stmt->execute($update_fields);
+                $message = "Staff member updated successfully!";
+                $message_type = "success";
+                break;
+                
+            case 'delete':
+                // Delete staff member
+                $stmt = $pdo->prepare("DELETE FROM employees WHERE employee_id = ?");
+                $stmt->execute([$_POST['employee_id']]);
+                $message = "Staff member deleted successfully!";
+                $message_type = "success";
+                break;
         }
+    } catch(PDOException $e) {
+        $message = "Database error: " . $e->getMessage();
+        $message_type = "error";
+    } catch(Exception $e) {
+        $message = "Error: " . $e->getMessage();
+        $message_type = "error";
     }
 }
 
 // Fetch all staff members
 try {
     $stmt = $pdo->query("SELECT * FROM employees ORDER BY created_at DESC");
-    $staff_members = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $staff_members = $stmt->fetchAll();
 } catch(PDOException $e) {
     $staff_members = [];
     $message = "Error fetching staff: " . $e->getMessage();
@@ -106,11 +147,11 @@ try {
 
 // Get staff for editing
 $edit_staff = null;
-if (isset($_GET['edit'])) {
+if (isset($_GET['edit']) && is_numeric($_GET['edit'])) {
     try {
         $stmt = $pdo->prepare("SELECT * FROM employees WHERE employee_id = ?");
         $stmt->execute([$_GET['edit']]);
-        $edit_staff = $stmt->fetch(PDO::FETCH_ASSOC);
+        $edit_staff = $stmt->fetch();
     } catch(PDOException $e) {
         $message = "Error fetching staff details: " . $e->getMessage();
         $message_type = "error";

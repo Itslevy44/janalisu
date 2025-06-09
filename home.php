@@ -871,7 +871,7 @@ footer::before {
             </div>
         </nav>
     </header>
-<br><br><br><br>
+<br><br><br>
     <!-- Hero Section -->
     <section id="home" class="hero">
         <div class="hero-content">

@@ -1,18 +1,5 @@
 <?php
-session_start();
-
-// Database connection - XAMPP default settings
-$servername = "localhost";
-$username = "root";
-$password = "";
-$dbname = "janalisu";
-
-try {
-    $pdo = new PDO("mysql:host=$servername;dbname=$dbname", $username, $password);
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-} catch(PDOException $e) {
-    die("Connection failed: " . $e->getMessage());
-}
+require_once 'config.php'; // Use config for DB and session
 
 // Handle form submission for adding new event
 $message = '';
@@ -36,22 +23,19 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['add_event'])) {
         
         if (in_array($file_type, $allowed_types)) {
             $upload_dir = 'uploads/events/';
-            
-            // Create upload directory if it doesn't exist
             if (!file_exists($upload_dir)) {
                 mkdir($upload_dir, 0777, true);
             }
             
-            // Generate unique filename
             $file_extension = pathinfo($_FILES['event_image']['name'], PATHINFO_EXTENSION);
             $image_name = 'event_' . time() . '_' . rand(1000, 9999) . '.' . $file_extension;
             $upload_path = $upload_dir . $image_name;
             
-            if (move_uploaded_file($_FILES['event_image']['tmp_name'], $upload_path)) {
-                $image_name = $upload_path;
-            } else {
+            if (!move_uploaded_file($_FILES['event_image']['tmp_name'], $upload_path)) {
                 $message = "Error uploading image file.";
                 $message_type = "error";
+            } else {
+                $image_name = $upload_path;
             }
         } else {
             $message = "Please upload a valid image file (JPEG, PNG, GIF).";
@@ -90,6 +74,7 @@ try {
     $message_type = "error";
 }
 ?>
+
 
 <!DOCTYPE html>
 <html lang="en">
