@@ -668,7 +668,7 @@ if (isset($_GET['registered']) && $_GET['registered'] === 'success') {
             </div>
 
             <ul class="nav-menu">
-                <li><a href="home.php">Home</a></li>
+                <li><a href="index.php">Home</a></li>
                 <li><a href="events.php">Events</a></li>
                 <li><a href="donate.php">Donate</a></li>
                 <li><a href="register.php">Register</a></li>

@@ -943,7 +943,7 @@ if (isset($_GET['edit']) && is_numeric($_GET['edit'])) {
         // Logout function
         function logout() {
             if (confirm('Are you sure you want to logout?')) {
-                window.location.href = 'home.php';
+                window.location.href = 'index.php';
             }
         }
 

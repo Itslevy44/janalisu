@@ -857,7 +857,7 @@ foreach ($events as $event) {
     </div>
 
             <ul class="nav-menu">
-                <li><a href="home.php">Home</a></li>
+                <li><a href="index.php">Home</a></li>
                 <li><a href="events.php">Events</a></li>
                 <li><a href="donate.php">Donate</a></li>
                 <li><a href="login.php">Login</a></li>
