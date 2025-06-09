@@ -1,13 +1,7 @@
 <?php
 session_start();
 
-// Optional: Check if admin is logged in (uncomment when login system is ready)
-// if (!isset($_SESSION['admin_logged_in'])) {
-//     header('Location: login.php');
-//     exit();
-// }
-
-// Database connection - XAMPP default settings
+// Database connection
 $servername = "localhost";
 $username = "root";
 $password = "";
@@ -24,7 +18,7 @@ try {
 $message = '';
 $messageType = '';
 
-if ($_POST && isset($_POST['action']) && $_POST['action'] == 'add_student') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] == 'add_student') {
     try {
         $stmt = $pdo->prepare("INSERT INTO students (first_name, last_name, email, phone, date_of_birth, gender, program, address, enrollment_date, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
         
@@ -133,85 +127,105 @@ try {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Student Management - JANALISU Admin</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
+        :root {
+            --primary: #8b5cf6;
+            --primary-dark: #7c3aed;
+            --secondary: #ec4899;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --dark: #1e293b;
+            --light: #f8fafc;
+            --gray: #94a3b8;
+            --card-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            --transition: all 0.3s ease;
+        }
+        
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #f0f4ff 0%, #e6f0ff 100%);
+            color: var(--dark);
             min-height: 100vh;
+            line-height: 1.6;
         }
 
-        /* Header Styles (same as dashboard) */
+        /* Header Styles */
         .header {
-            background: rgba(255, 255, 255, 0.95);
-            padding: 15px 30px;
+            background: white;
+            padding: 1rem 1.5rem;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            box-shadow: var(--card-shadow);
+            position: sticky;
+            top: 0;
+            z-index: 100;
         }
 
-        .logo-section {
+        .logo-container {
             display: flex;
             align-items: center;
             gap: 15px;
         }
 
-        .logo {
+        .logo-image {
             width: 60px;
             height: 60px;
             border-radius: 50%;
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-weight: bold;
-            font-size: 20px;
+            object-fit: cover;
+            border: 3px solid transparent;
+            background: linear-gradient(white, white) padding-box,
+                        linear-gradient(135deg, var(--secondary) 0%, var(--primary) 100%) border-box;
         }
 
-        .org-name {
-            color: #667eea;
-            font-size: 24px;
+        .logo-text {
+            font-size: 1.5rem;
             font-weight: bold;
+            background: linear-gradient(135deg, var(--secondary) 0%, var(--primary) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
         }
 
-        .org-name .empowerment {
-            color: #e91e63;
+        .nav-toggle {
+            display: none;
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            color: var(--primary);
+            cursor: pointer;
         }
 
         .nav-menu {
             display: flex;
-            gap: 30px;
+            gap: 1rem;
             align-items: center;
         }
 
         .nav-item {
-            padding: 10px 20px;
+            padding: 0.5rem 1rem;
             text-decoration: none;
-            color: #666;
+            color: var(--dark);
             font-weight: 500;
-            border-radius: 25px;
-            transition: all 0.3s ease;
+            border-radius: 50px;
+            transition: var(--transition);
         }
 
         .nav-item.active {
-            background: #e91e63;
+            background: linear-gradient(135deg, var(--secondary) 0%, var(--primary) 100%);
             color: white;
         }
 
-        .nav-item:hover {
-            background: #f0f0f0;
-            color: #333;
-        }
-
-        .nav-item.active:hover {
-            background: #c2185b;
+        .nav-item:hover:not(.active) {
+            background: #f1f5f9;
         }
 
         .user-section {
@@ -220,219 +234,293 @@ try {
             gap: 15px;
         }
 
-        .welcome-text {
-            color: #666;
-            font-size: 14px;
-        }
-
         .logout-btn {
-            background: #f44336;
+            background: linear-gradient(135deg, var(--danger) 0%, #dc2626 100%);
             color: white;
-            padding: 8px 20px;
+            padding: 0.5rem 1rem;
             border: none;
-            border-radius: 20px;
+            border-radius: 50px;
             cursor: pointer;
             font-weight: 500;
-            transition: background 0.3s ease;
+            transition: var(--transition);
+            display: flex;
+            align-items: center;
+            gap: 5px;
         }
 
         .logout-btn:hover {
-            background: #d32f2f;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(239, 68, 68, 0.3);
         }
 
         /* Main Content */
         .main-content {
-            padding: 30px;
+            padding: 1.5rem;
+            max-width: 1600px;
+            margin: 0 auto;
         }
 
         .page-header {
             background: white;
-            padding: 30px;
-            border-radius: 15px;
-            margin-bottom: 30px;
-            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+            padding: 1.5rem;
+            border-radius: 1rem;
+            margin-bottom: 1.5rem;
+            box-shadow: var(--card-shadow);
         }
 
         .page-title {
-            color: #333;
-            font-size: 32px;
-            font-weight: 300;
-            margin-bottom: 10px;
+            font-size: 1.8rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(135deg, var(--secondary) 0%, var(--primary) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
         }
 
         .page-subtitle {
-            color: #666;
-            font-size: 16px;
+            color: var(--gray);
+            font-size: 1rem;
+        }
+
+        /* Message Styles */
+        .message {
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin-bottom: 1.5rem;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .message.success {
+            background: #dcfce7;
+            color: #166534;
+            border-left: 4px solid var(--success);
+        }
+
+        .message.error {
+            background: #fee2e2;
+            color: #b91c1c;
+            border-left: 4px solid var(--danger);
         }
 
         /* Action Bar */
         .action-bar {
             background: white;
-            padding: 20px 30px;
-            border-radius: 15px;
-            margin-bottom: 30px;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 20px;
+            padding: 1.5rem;
+            border-radius: 1rem;
+            margin-bottom: 1.5rem;
+            box-shadow: var(--card-shadow);
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 1rem;
         }
 
         .search-filters {
-            display: flex;
-            gap: 15px;
-            align-items: center;
-            flex-wrap: wrap;
+            display: grid;
+            grid-template-columns: 1fr auto auto;
+            gap: 0.75rem;
         }
 
         .search-input, .filter-select {
-            padding: 10px 15px;
-            border: 2px solid #e0e0e0;
-            border-radius: 25px;
-            font-size: 14px;
+            padding: 0.75rem 1rem;
+            border: 2px solid #e2e8f0;
+            border-radius: 50px;
+            font-size: 1rem;
             outline: none;
-            transition: border-color 0.3s ease;
+            transition: var(--transition);
         }
 
         .search-input:focus, .filter-select:focus {
-            border-color: #667eea;
-        }
-
-        .search-input {
-            width: 300px;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.2);
         }
 
         .filter-select {
-            min-width: 120px;
+            background: white;
+            cursor: pointer;
         }
 
         .add-student-btn {
-            background: #4caf50;
+            background: linear-gradient(135deg, var(--success) 0%, #059669 100%);
             color: white;
-            padding: 12px 25px;
+            padding: 0.75rem 1.5rem;
             border: none;
-            border-radius: 25px;
-            font-size: 16px;
+            border-radius: 50px;
+            font-size: 1rem;
             font-weight: 500;
             cursor: pointer;
-            transition: all 0.3s ease;
-            text-decoration: none;
-            display: inline-block;
+            transition: var(--transition);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            white-space: nowrap;
         }
 
         .add-student-btn:hover {
-            background: #45a049;
             transform: translateY(-2px);
-        }
-
-        /* Message Styles */
-        .message {
-            padding: 15px 20px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-            font-weight: 500;
-        }
-
-        .message.success {
-            background: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
-
-        .message.error {
-            background: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
+            box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
         }
 
         /* Students Table */
         .students-container {
             background: white;
-            border-radius: 15px;
-            padding: 30px;
-            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+            border-radius: 1rem;
+            padding: 1.5rem;
+            box-shadow: var(--card-shadow);
             overflow: hidden;
+        }
+
+        .table-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .table-title {
+            font-size: 1.25rem;
+            font-weight: 600;
         }
 
         .students-table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 20px;
         }
 
         .students-table th,
         .students-table td {
-            padding: 15px;
+            padding: 1rem;
             text-align: left;
-            border-bottom: 1px solid #e0e0e0;
+            border-bottom: 1px solid #e2e8f0;
         }
 
         .students-table th {
-            background: #f8f9fa;
+            background: #f8fafc;
             font-weight: 600;
-            color: #333;
+            color: var(--dark);
+            position: sticky;
+            top: 0;
+        }
+
+        .students-table tr:last-child td {
+            border-bottom: none;
         }
 
         .students-table tr:hover {
-            background: #f8f9fa;
+            background: #f8fafc;
         }
 
         .status-badge {
-            padding: 5px 12px;
-            border-radius: 20px;
-            font-size: 12px;
+            padding: 0.4rem 0.8rem;
+            border-radius: 50px;
+            font-size: 0.85rem;
             font-weight: 500;
-            text-transform: uppercase;
+            display: inline-block;
         }
 
         .status-active {
-            background: #d4edda;
-            color: #155724;
+            background: #dcfce7;
+            color: #166534;
         }
 
         .status-inactive {
-            background: #f8d7da;
-            color: #721c24;
+            background: #fee2e2;
+            color: #b91c1c;
         }
 
         .action-btn {
-            padding: 5px 10px;
+            padding: 0.5rem;
             border: none;
-            border-radius: 5px;
+            border-radius: 0.5rem;
             cursor: pointer;
-            font-size: 12px;
-            margin: 2px;
-            text-decoration: none;
-            display: inline-block;
-            transition: all 0.3s ease;
+            font-size: 0.85rem;
+            margin: 0.15rem;
+            transition: var(--transition);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 2.2rem;
+            height: 2.2rem;
         }
 
         .btn-edit {
-            background: #2196f3;
-            color: white;
+            background: #dbeafe;
+            color: var(--primary);
         }
 
         .btn-edit:hover {
-            background: #1976d2;
+            background: var(--primary);
+            color: white;
         }
 
         .btn-delete {
-            background: #f44336;
-            color: white;
+            background: #fee2e2;
+            color: var(--danger);
         }
 
         .btn-delete:hover {
-            background: #d32f2f;
-        }
-
-        .btn-toggle {
-            background: #ff9800;
+            background: var(--danger);
             color: white;
         }
 
+        .btn-toggle {
+            background: #ffedd5;
+            color: var(--warning);
+        }
+
         .btn-toggle:hover {
-            background: #f57c00;
+            background: var(--warning);
+            color: white;
+        }
+
+        /* Mobile table view */
+        .mobile-student-card {
+            display: none;
+            background: white;
+            border-radius: 0.75rem;
+            padding: 1.25rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+        }
+
+        .student-card-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.75rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .student-card-body {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+
+        .student-info {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .student-label {
+            font-size: 0.75rem;
+            color: var(--gray);
+            margin-bottom: 0.25rem;
+        }
+
+        .student-value {
+            font-weight: 500;
+            word-break: break-word;
+        }
+
+        .student-card-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.5rem;
+            margin-top: 1rem;
         }
 
         /* Modal Styles */
@@ -445,160 +533,215 @@ try {
             width: 100%;
             height: 100%;
             background-color: rgba(0, 0, 0, 0.5);
+            overflow: auto;
+            backdrop-filter: blur(3px);
         }
 
         .modal-content {
             background-color: white;
             margin: 2% auto;
             padding: 0;
-            border-radius: 15px;
+            border-radius: 1rem;
             width: 90%;
             max-width: 600px;
             max-height: 90vh;
             overflow-y: auto;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            animation: modalFade 0.3s ease-out;
+        }
+
+        @keyframes modalFade {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
         }
 
         .modal-header {
-            background: linear-gradient(135deg, #667eea, #764ba2);
+            background: linear-gradient(135deg, var(--secondary) 0%, var(--primary) 100%);
             color: white;
-            padding: 20px 30px;
-            border-radius: 15px 15px 0 0;
+            padding: 1.25rem 1.5rem;
+            border-radius: 1rem 1rem 0 0;
             display: flex;
             justify-content: space-between;
             align-items: center;
         }
 
         .modal-title {
-            font-size: 24px;
-            font-weight: 300;
+            font-size: 1.5rem;
+            font-weight: 600;
         }
 
         .close {
             color: white;
-            font-size: 28px;
+            font-size: 1.75rem;
             font-weight: bold;
             cursor: pointer;
-            transition: opacity 0.3s ease;
+            transition: var(--transition);
         }
 
         .close:hover {
-            opacity: 0.7;
+            opacity: 0.8;
         }
 
         .modal-body {
-            padding: 30px;
+            padding: 1.5rem;
         }
 
         .form-group {
-            margin-bottom: 20px;
+            margin-bottom: 1.25rem;
         }
 
         .form-group label {
             display: block;
-            margin-bottom: 8px;
+            margin-bottom: 0.5rem;
             font-weight: 500;
-            color: #333;
+            color: var(--dark);
         }
 
         .form-group input,
         .form-group select,
         .form-group textarea {
             width: 100%;
-            padding: 12px 15px;
-            border: 2px solid #e0e0e0;
-            border-radius: 10px;
-            font-size: 14px;
-            transition: border-color 0.3s ease;
+            padding: 0.75rem 1rem;
+            border: 2px solid #e2e8f0;
+            border-radius: 0.75rem;
+            font-size: 1rem;
+            transition: var(--transition);
         }
 
         .form-group input:focus,
         .form-group select:focus,
         .form-group textarea:focus {
             outline: none;
-            border-color: #667eea;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.2);
         }
 
         .form-group textarea {
             resize: vertical;
-            min-height: 80px;
+            min-height: 100px;
         }
 
         .form-row {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 20px;
+            gap: 1.25rem;
         }
 
         .submit-btn {
-            background: linear-gradient(135deg, #667eea, #764ba2);
+            background: linear-gradient(135deg, var(--secondary) 0%, var(--primary) 100%);
             color: white;
-            padding: 15px 30px;
+            padding: 1rem;
             border: none;
-            border-radius: 10px;
-            font-size: 16px;
-            font-weight: 500;
+            border-radius: 0.75rem;
+            font-size: 1rem;
+            font-weight: 600;
             cursor: pointer;
             width: 100%;
-            transition: all 0.3s ease;
+            transition: var(--transition);
+            margin-top: 0.5rem;
         }
 
         .submit-btn:hover {
             transform: translateY(-2px);
-            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
+            box-shadow: 0 8px 20px rgba(139, 92, 246, 0.3);
         }
 
         /* No Results */
         .no-results {
             text-align: center;
-            padding: 50px;
-            color: #666;
+            padding: 2rem;
+            color: var(--gray);
         }
 
         .no-results-icon {
-            font-size: 64px;
-            margin-bottom: 20px;
+            font-size: 3.5rem;
+            margin-bottom: 1rem;
             opacity: 0.5;
+            color: var(--primary);
         }
 
         /* Responsive Design */
-        @media (max-width: 768px) {
-            .header {
-                flex-direction: column;
-                gap: 15px;
-                padding: 15px;
-            }
-
-            .nav-menu {
-                gap: 15px;
-            }
-
+        @media (max-width: 1200px) {
             .action-bar {
-                flex-direction: column;
-                align-items: stretch;
-            }
-
-            .search-filters {
-                justify-content: center;
-            }
-
-            .search-input {
-                width: 100%;
-            }
-
-            .students-table {
-                display: block;
-                overflow-x: auto;
-                white-space: nowrap;
-            }
-
-            .form-row {
                 grid-template-columns: 1fr;
             }
+            
+            .search-filters {
+                grid-template-columns: 1fr;
+            }
+        }
 
+        @media (max-width: 992px) {
+            .students-table {
+                display: none;
+            }
+            
+            .mobile-student-card {
+                display: block;
+            }
+            
+            .form-row {
+                grid-template-columns: 1fr;
+                gap: 1rem;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .header {
+                flex-wrap: wrap;
+                gap: 1rem;
+            }
+            
+            .nav-toggle {
+                display: block;
+            }
+            
+            .nav-menu {
+                display: none;
+                width: 100%;
+                flex-direction: column;
+                gap: 0.5rem;
+                margin-top: 1rem;
+            }
+            
+            .nav-menu.active {
+                display: flex;
+            }
+            
+            .user-section {
+                margin-left: auto;
+            }
+            
+            .page-title {
+                font-size: 1.5rem;
+            }
+            
+            .student-card-body {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 576px) {
+            .main-content {
+                padding: 1rem;
+            }
+            
+            .page-header, .action-bar, .students-container {
+                padding: 1.25rem;
+            }
+            
             .modal-content {
                 width: 95%;
-                margin: 5% auto;
+                margin: 1rem auto;
+            }
+            
+            .student-card-actions {
+                flex-wrap: wrap;
+            }
+            
+            .action-btn {
+                width: 100%;
+                margin: 0.25rem 0;
             }
         }
     </style>
@@ -606,24 +749,25 @@ try {
 <body>
     <!-- Header -->
     <header class="header">
-        <div class="logo-section">
-            <div class="logo">JEG</div>
-            <div class="org-name">
-                JANALISU <span class="empowerment">EMPOWERMENT</span><br>
-                <span style="font-size: 18px;">GROUP</span>
-            </div>
+        <div class="logo-container">
+            <div class="logo-text">JANALISU EMPOWERMENT</div>
         </div>
         
-        <nav class="nav-menu">
-            <a href="admin_dashboard.php" class="nav-item">Dashboard</a>
-            <a href="students.php" class="nav-item active">Students</a>
-            <a href="staffs.php" class="nav-item">Staff</a>
-            <a href="add_events.php" class="nav-item">Events</a>
+        <button class="nav-toggle" id="navToggle">
+            <i class="fas fa-bars"></i>
+        </button>
+        
+        <nav class="nav-menu" id="navMenu">
+            <a href="admin_dashboard.php" class="nav-item"><i class="fas fa-chart-line"></i> Dashboard</a>
+            <a href="students.php" class="nav-item active"><i class="fas fa-user-graduate"></i> Students</a>
+            <a href="staffs.php" class="nav-item"><i class="fas fa-users"></i> Staff</a>
+            <a href="add_events.php" class="nav-item"><i class="fas fa-calendar-alt"></i> Events</a>
         </nav>
         
         <div class="user-section">
-            <span class="welcome-text">Welcome,<br>Admin</span>
-            <button class="logout-btn" onclick="logout()">Logout</button>
+            <button class="logout-btn" onclick="logout()">
+                <i class="fas fa-sign-out-alt"></i> Logout
+            </button>
         </div>
     </header>
 
@@ -638,6 +782,7 @@ try {
         <!-- Message Display -->
         <?php if ($message): ?>
             <div class="message <?php echo $messageType; ?>">
+                <i class="fas fa-<?php echo $messageType == 'success' ? 'check-circle' : 'exclamation-circle'; ?>"></i>
                 <?php echo htmlspecialchars($message); ?>
             </div>
         <?php endif; ?>
@@ -648,13 +793,13 @@ try {
                 <form method="GET" style="display: contents;">
                     <input type="text" name="search" class="search-input" placeholder="Search students..." value="<?php echo htmlspecialchars($search); ?>">
                     
-                    <select name="filter_status" class="filter-select" onchange="this.form.submit()">
+                    <select name="filter_status" class="filter-select">
                         <option value="">All Status</option>
                         <option value="Active" <?php echo $filter_status == 'Active' ? 'selected' : ''; ?>>Active</option>
                         <option value="Inactive" <?php echo $filter_status == 'Inactive' ? 'selected' : ''; ?>>Inactive</option>
                     </select>
                     
-                    <select name="filter_program" class="filter-select" onchange="this.form.submit()">
+                    <select name="filter_program" class="filter-select">
                         <option value="">All Programs</option>
                         <?php foreach ($programs as $program): ?>
                             <option value="<?php echo htmlspecialchars($program['program']); ?>" 
@@ -664,24 +809,32 @@ try {
                         <?php endforeach; ?>
                     </select>
                     
-                    <button type="submit" style="display: none;"></button>
+                    <button type="submit" class="filter-select" style="background: var(--primary); color: white;">
+                        <i class="fas fa-filter"></i> Apply
+                    </button>
                 </form>
             </div>
             
-            <button class="add-student-btn" onclick="openModal()">+ Add New Student</button>
+            <button class="add-student-btn" onclick="openModal()">
+                <i class="fas fa-user-plus"></i> Add New Student
+            </button>
         </div>
 
         <!-- Students Table -->
         <div class="students-container">
-            <h3>Students List (<?php echo count($students); ?> total)</h3>
+            <div class="table-header">
+                <h3 class="table-title">Students List</h3>
+                <span><?php echo count($students); ?> students</span>
+            </div>
             
             <?php if (empty($students)): ?>
                 <div class="no-results">
-                    <div class="no-results-icon">🎓</div>
+                    <div class="no-results-icon"><i class="fas fa-user-graduate"></i></div>
                     <h3>No students found</h3>
                     <p>Try adjusting your search criteria or add a new student.</p>
                 </div>
             <?php else: ?>
+                <!-- Desktop Table -->
                 <table class="students-table">
                     <thead>
                         <tr>
@@ -710,21 +863,66 @@ try {
                                     </span>
                                 </td>
                                 <td>
-                                    <a href="?toggle_status=<?php echo $student['student_id']; ?>" 
+                                    <button onclick="toggleStatus(<?php echo $student['student_id']; ?>)" 
                                        class="action-btn btn-toggle"
-                                       onclick="return confirm('Change student status?')">
-                                        Toggle
-                                    </a>
-                                    <a href="?delete=<?php echo $student['student_id']; ?>" 
+                                       title="Change Status">
+                                        <i class="fas fa-sync-alt"></i>
+                                    </button>
+                                    <button onclick="deleteStudent(<?php echo $student['student_id']; ?>)" 
                                        class="action-btn btn-delete"
-                                       onclick="return confirm('Are you sure you want to delete this student?')">
-                                        Delete
-                                    </a>
+                                       title="Delete Student">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
                                 </td>
                             </tr>
                         <?php endforeach; ?>
                     </tbody>
                 </table>
+                
+                <!-- Mobile Cards -->
+                <?php foreach ($students as $student): ?>
+                    <div class="mobile-student-card">
+                        <div class="student-card-header">
+                            <div>
+                                <strong><?php echo htmlspecialchars($student['first_name'] . ' ' . $student['last_name']); ?></strong>
+                                <div class="status-badge status-<?php echo strtolower($student['status']); ?>">
+                                    <?php echo $student['status']; ?>
+                                </div>
+                            </div>
+                            <div>ID: <?php echo $student['student_id']; ?></div>
+                        </div>
+                        <div class="student-card-body">
+                            <div class="student-info">
+                                <span class="student-label">Email</span>
+                                <span class="student-value"><?php echo htmlspecialchars($student['email']); ?></span>
+                            </div>
+                            <div class="student-info">
+                                <span class="student-label">Phone</span>
+                                <span class="student-value"><?php echo htmlspecialchars($student['phone']); ?></span>
+                            </div>
+                            <div class="student-info">
+                                <span class="student-label">Program</span>
+                                <span class="student-value"><?php echo htmlspecialchars($student['program']); ?></span>
+                            </div>
+                            <div class="student-info">
+                                <span class="student-label">Enrollment Date</span>
+                                <span class="student-value"><?php echo date('M d, Y', strtotime($student['enrollment_date'])); ?></span>
+                            </div>
+                        </div>
+                        <div class="student-card-actions">
+                            <button onclick="toggleStatus(<?php echo $student['student_id']; ?>)" 
+                               class="action-btn btn-toggle"
+                               title="Change Status">
+                                <i class="fas fa-sync-alt"></i>
+                            </button>
+                            <button onclick="deleteStudent(<?php echo $student['student_id']; ?>)" 
+                               class="action-btn btn-delete"
+                               title="Delete Student">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
             <?php endif; ?>
         </div>
     </main>
@@ -809,6 +1007,14 @@ try {
     </div>
 
     <script>
+        // Mobile navigation toggle
+        const navToggle = document.getElementById('navToggle');
+        const navMenu = document.getElementById('navMenu');
+        
+        navToggle.addEventListener('click', () => {
+            navMenu.classList.toggle('active');
+        });
+
         // Modal functions
         function openModal() {
             document.getElementById('studentModal').style.display = 'block';
@@ -829,7 +1035,21 @@ try {
         // Logout function
         function logout() {
             if (confirm('Are you sure you want to logout?')) {
-                window.location.href = 'login.php';
+                window.location.href = 'home.php';
+            }
+        }
+        
+        // Delete student confirmation
+        function deleteStudent(id) {
+            if (confirm('Are you sure you want to delete this student?')) {
+                window.location.href = `?delete=${id}`;
+            }
+        }
+        
+        // Toggle status confirmation
+        function toggleStatus(id) {
+            if (confirm('Are you sure you want to change this student\'s status?')) {
+                window.location.href = `?toggle_status=${id}`;
             }
         }
 
@@ -838,16 +1058,6 @@ try {
             if (e.key === 'Enter') {
                 this.form.submit();
             }
-        });
-
-        // Smooth page load animation
-        document.addEventListener('DOMContentLoaded', function() {
-            document.body.style.opacity = '0';
-            document.body.style.transition = 'opacity 0.5s ease-in-out';
-            
-            setTimeout(() => {
-                document.body.style.opacity = '1';
-            }, 100);
         });
 
         // Auto-hide messages after 5 seconds

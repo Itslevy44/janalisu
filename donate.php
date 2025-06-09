@@ -430,6 +430,122 @@
 
            
         }
+        /* Tablet responsiveness */
+@media (max-width: 1024px) {
+    nav {
+        padding: 0 1rem;
+    }
+    .container {
+        max-width: 98vw;
+        padding: 0 1rem;
+    }
+    .options-grid {
+        grid-template-columns: 1fr;
+        gap: 2rem;
+    }
+    .option-card {
+        padding: 2rem;
+    }
+    .donate-hero-content {
+        max-width: 95vw;
+    }
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+    nav {
+        flex-direction: column;
+        align-items: flex-start;
+        padding: 0 0.5rem;
+    }
+    .logo-container {
+        margin-bottom: 1rem;
+    }
+    .nav-menu {
+        position: fixed;
+        left: -100%;
+        top: 70px;
+        flex-direction: column;
+        background-color: rgba(255, 255, 255, 0.98);
+        width: 100%;
+        text-align: center;
+        transition: 0.3s;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+        padding: 2rem 0;
+        z-index: 1001;
+    }
+    .nav-menu.active {
+        left: 0;
+    }
+    .mobile-menu {
+        display: flex;
+        margin-left: auto;
+    }
+    .donate-hero {
+        padding: 4rem 1rem 2rem;
+    }
+    .donate-hero h1 {
+        font-size: 2.2rem;
+    }
+    .donate-hero p {
+        font-size: 1rem;
+    }
+    .section-title {
+        font-size: 1.5rem;
+    }
+    .option-card {
+        padding: 1.2rem;
+    }
+    .option-card h3 {
+        font-size: 1.2rem;
+    }
+    .option-icon {
+        width: 60px;
+        height: 60px;
+        font-size: 1.5rem;
+    }
+    .contact-info {
+        padding: 1rem;
+    }
+}
+
+/* Small mobile devices */
+@media (max-width: 480px) {
+    .logo-image {
+        width: 48px;
+        height: 48px;
+    }
+    .logo-text {
+        font-size: 1.1rem;
+    }
+    .donate-hero {
+        padding: 2rem 0.5rem 1rem;
+    }
+    .donate-hero h1 {
+        font-size: 1.1rem;
+    }
+    .donate-hero p {
+        font-size: 0.95rem;
+    }
+    .section-title {
+        font-size: 1.1rem;
+    }
+    .option-card {
+        padding: 0.7rem;
+    }
+    .option-icon {
+        width: 40px;
+        height: 40px;
+        font-size: 1rem;
+    }
+    .contact-info {
+        padding: 0.5rem;
+    }
+    .btn, .btn-primary, .btn-secondary {
+        font-size: 0.95rem;
+        padding: 0.8rem 1.2rem;
+    }
+}
     </style>
 </head>
 <body>
@@ -454,7 +570,7 @@
             </div>
         </nav>
     </header>
-
+<br><br>
     <main class="main-content">
         <!-- Hero Section -->
         <section class="donate-hero">

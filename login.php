@@ -547,6 +547,115 @@ if (isset($_GET['registered']) && $_GET['registered'] === 'success') {
                 padding: 1.5rem;
             }
         }
+        /* Tablet responsiveness */
+@media (max-width: 1024px) {
+    nav {
+        padding: 0 1rem;
+    }
+    .container {
+        max-width: 98vw;
+        padding: 0 1rem;
+    }
+    .login-card {
+        max-width: 90vw;
+        padding: 2.2rem;
+    }
+    .logo-image {
+        width: 65px;
+        height: 65px;
+    }
+    .logo-text {
+        font-size: 1.4rem;
+    }
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+    nav {
+        flex-direction: column;
+        align-items: flex-start;
+        padding: 0 0.5rem;
+    }
+    .logo-container {
+        margin-bottom: 1rem;
+    }
+    .nav-menu {
+        position: fixed;
+        left: -100%;
+        top: 70px;
+        flex-direction: column;
+        background-color: rgba(255, 255, 255, 0.98);
+        backdrop-filter: blur(20px);
+        width: 100%;
+        text-align: center;
+        transition: 0.3s;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+        padding: 2rem 0;
+        z-index: 1001;
+    }
+    .nav-menu.active {
+        left: 0;
+    }
+    .mobile-menu {
+        display: flex;
+        margin-left: auto;
+    }
+    .login-container {
+        padding: 1rem;
+        margin-top: 70px;
+    }
+    .login-card {
+        padding: 1.2rem;
+        margin: 0.5rem;
+        max-width: 98vw;
+    }
+    .login-title {
+        font-size: 1.5rem;
+    }
+    .logo-image {
+        width: 50px;
+        height: 50px;
+    }
+    .logo-text {
+        font-size: 1.1rem;
+    }
+    .form-options {
+        flex-direction: column;
+        gap: 1rem;
+        align-items: flex-start;
+    }
+}
+
+/* Small mobile devices */
+@media (max-width: 480px) {
+    .logo-image {
+        width: 38px;
+        height: 38px;
+    }
+    .logo-text {
+        font-size: 1rem;
+    }
+    .login-card {
+        padding: 0.7rem;
+        margin: 0.2rem;
+    }
+    .login-title {
+        font-size: 1.1rem;
+    }
+    .form-label,
+    .form-input,
+    .forgot-password,
+    .register-link,
+    .login-btn {
+        font-size: 0.95rem;
+    }
+    .form-input {
+        padding: 0.7rem 0.8rem;
+    }
+    .login-btn {
+        padding: 0.8rem;
+    }
+}
     </style>
 </head>
 <body>

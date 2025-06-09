@@ -1,13 +1,7 @@
 <?php
 session_start();
 
-// Optional: Check if admin is logged in (uncomment when login system is ready)
-// if (!isset($_SESSION['admin_logged_in'])) {
-//     header('Location: login.php');
-//     exit();
-// }
-
-// Database connection - XAMPP default settings
+// Database connection
 $servername = "localhost";
 $username = "root";
 $password = "";
@@ -130,7 +124,27 @@ if (isset($_GET['edit'])) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Staff Management - JANALISU Admin</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
+        :root {
+            --primary-color: #4a6bff;
+            --primary-dark: #3a56cc;
+            --secondary-color: #6c757d;
+            --success-color: #28a745;
+            --danger-color: #dc3545;
+            --warning-color: #ffc107;
+            --info-color: #17a2b8;
+            --light-color: #f8f9fa;
+            --dark-color: #343a40;
+            --white: #ffffff;
+            --gray-light: #e9ecef;
+            --gray: #6c757d;
+            --gray-dark: #495057;
+            --border-radius: 0.375rem;
+            --box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+            --transition: all 0.3s ease;
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -139,390 +153,472 @@ if (isset($_GET['edit'])) {
 
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
+            background-color: #f5f7fa;
+            color: #333;
+            line-height: 1.6;
         }
 
         /* Header Styles */
         .header {
-            background: rgba(255, 255, 255, 0.95);
-            padding: 15px 30px;
+            background: var(--white);
+            padding: 1rem 2rem;
             display: flex;
+            flex-wrap: wrap;
             justify-content: space-between;
             align-items: center;
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            position: sticky;
+            top: 0;
+            z-index: 1000;
         }
 
         .logo-container {
             display: flex;
             align-items: center;
-            gap: 15px;
+            gap: 1rem;
+            margin-right: 1rem;
         }
 
         .logo-image {
-            width: 80px;
-            height: 80px;
+            width: 60px;
+            height: 60px;
             border-radius: 50%;
             object-fit: cover;
             border: 3px solid transparent;
-            background: linear-gradient(white, white) padding-box,
-                        linear-gradient(135deg, #ec4899 0%, #8b5cf6 50%, #06b6d4 100%) border-box;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
-        }
-
-        .logo-image:hover {
-            transform: scale(1.05);
-            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+            background: linear-gradient(var(--white), var(--white)) padding-box,
+                        linear-gradient(135deg, var(--danger-color) 0%, var(--primary-color) 50%, var(--info-color) 100%) border-box;
+            box-shadow: var(--box-shadow);
+            transition: var(--transition);
         }
 
         .logo-text {
-            font-size: 1.8rem;
+            font-size: 1.5rem;
             font-weight: bold;
-            background: linear-gradient(135deg, #ec4899 0%, #8b5cf6 50%, #06b6d4 100%);
+            background: linear-gradient(135deg, var(--danger-color) 0%, var(--primary-color) 50%, var(--info-color) 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
-            margin: 0;
         }
 
         .nav-menu {
             display: flex;
-            gap: 30px;
+            gap: 1rem;
             align-items: center;
+            margin: 1rem 0;
         }
 
         .nav-item {
-            padding: 10px 20px;
+            padding: 0.5rem 1rem;
             text-decoration: none;
-            color: #666;
+            color: var(--gray);
             font-weight: 500;
-            border-radius: 25px;
-            transition: all 0.3s ease;
+            border-radius: 2rem;
+            transition: var(--transition);
+            font-size: 0.9rem;
         }
 
         .nav-item.active {
-            background: #e91e63;
-            color: white;
+            background: var(--primary-color);
+            color: var(--white);
         }
 
         .nav-item:hover {
-            background: #f0f0f0;
-            color: #333;
+            background: var(--gray-light);
+            color: var(--dark-color);
         }
 
         .nav-item.active:hover {
-            background: #c2185b;
+            background: var(--primary-dark);
         }
 
         .user-section {
             display: flex;
             align-items: center;
-            gap: 15px;
+            gap: 1rem;
         }
 
         .welcome-text {
-            color: #666;
-            font-size: 14px;
-        }
-
-        .logout-btn {
-            background: #f44336;
-            color: white;
-            padding: 8px 20px;
-            border: none;
-            border-radius: 20px;
-            cursor: pointer;
-            font-weight: 500;
-            transition: background 0.3s ease;
-        }
-
-        .logout-btn:hover {
-            background: #d32f2f;
-        }
-
-        /* Main Content */
-        .main-content {
-            padding: 30px;
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-
-        .page-header {
-            text-align: center;
-            margin-bottom: 40px;
-        }
-
-        .page-title {
-            color: white;
-            font-size: 36px;
-            font-weight: 300;
-            margin-bottom: 10px;
-        }
-
-        .page-subtitle {
-            color: rgba(255, 255, 255, 0.8);
-            font-size: 16px;
-        }
-
-        /* Message Styles */
-        .message {
-            padding: 15px;
-            margin-bottom: 20px;
-            border-radius: 10px;
-            font-weight: 500;
-        }
-
-        .message.success {
-            background: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
-
-        .message.error {
-            background: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
-
-        /* Form Container */
-        .form-container {
-            background: white;
-            padding: 30px;
-            border-radius: 15px;
-            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
-            margin-bottom: 30px;
-        }
-
-        .form-title {
-            color: #333;
-            font-size: 24px;
-            margin-bottom: 20px;
-            text-align: center;
-        }
-
-        .form-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 20px;
-            margin-bottom: 20px;
-        }
-
-        .form-group {
-            display: flex;
-            flex-direction: column;
-        }
-
-        .form-group.full-width {
-            grid-column: 1 / -1;
-        }
-
-        .form-label {
-            color: #555;
-            font-weight: 500;
-            margin-bottom: 8px;
-        }
-
-        .form-input {
-            padding: 12px;
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
-            font-size: 14px;
-            transition: border-color 0.3s ease;
-        }
-
-        .form-input:focus {
-            outline: none;
-            border-color: #667eea;
-        }
-
-        .form-textarea {
-            padding: 12px;
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
-            font-size: 14px;
-            resize: vertical;
-            min-height: 80px;
-            font-family: inherit;
-        }
-
-        .form-textarea:focus {
-            outline: none;
-            border-color: #667eea;
-        }
-
-        .btn-container {
-            display: flex;
-            gap: 15px;
-            justify-content: center;
+            color: var(--gray);
+            font-size: 0.8rem;
+            text-align: right;
         }
 
         .btn {
-            padding: 12px 30px;
+            padding: 0.5rem 1rem;
             border: none;
-            border-radius: 25px;
-            font-size: 16px;
+            border-radius: 2rem;
             font-weight: 500;
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: var(--transition);
             text-decoration: none;
-            display: inline-block;
-            text-align: center;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.9rem;
         }
 
         .btn-primary {
-            background: #667eea;
-            color: white;
+            background: var(--primary-color);
+            color: var(--white);
         }
 
         .btn-primary:hover {
-            background: #5a6fd8;
+            background: var(--primary-dark);
             transform: translateY(-2px);
         }
 
         .btn-secondary {
-            background: #6c757d;
-            color: white;
+            background: var(--secondary-color);
+            color: var(--white);
         }
 
         .btn-secondary:hover {
             background: #5a6268;
         }
 
-        /* Staff List */
-        .staff-list {
-            background: white;
-            border-radius: 15px;
-            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
-            overflow: hidden;
+        .btn-success {
+            background: var(--success-color);
+            color: var(--white);
         }
 
-        .list-header {
-            background: #667eea;
-            color: white;
-            padding: 20px 30px;
-            font-size: 20px;
-            font-weight: 500;
-        }
-
-        .staff-table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-
-        .staff-table th,
-        .staff-table td {
-            padding: 15px;
-            text-align: left;
-            border-bottom: 1px solid #e0e0e0;
-        }
-
-        .staff-table th {
-            background: #f8f9fa;
-            font-weight: 600;
-            color: #555;
-        }
-
-        .staff-table tr:hover {
-            background: #f8f9fa;
-        }
-
-        .status-badge {
-            padding: 4px 12px;
-            border-radius: 12px;
-            font-size: 12px;
-            font-weight: 500;
-        }
-
-        .status-active {
-            background: #d4edda;
-            color: #155724;
-        }
-
-        .status-inactive {
-            background: #f8d7da;
-            color: #721c24;
-        }
-
-        .action-btns {
-            display: flex;
-            gap: 8px;
-        }
-
-        .btn-small {
-            padding: 6px 12px;
-            font-size: 12px;
-            border-radius: 15px;
-        }
-
-        .btn-edit {
-            background: #28a745;
-            color: white;
-        }
-
-        .btn-edit:hover {
+        .btn-success:hover {
             background: #218838;
         }
 
-        .btn-delete {
-            background: #dc3545;
-            color: white;
+        .btn-danger {
+            background: var(--danger-color);
+            color: var(--white);
         }
 
-        .btn-delete:hover {
+        .btn-danger:hover {
             background: #c82333;
         }
 
-        .toggle-form-btn {
-            background: #e91e63;
-            color: white;
-            padding: 15px 30px;
-            border: none;
-            border-radius: 25px;
-            font-size: 16px;
-            font-weight: 500;
-            cursor: pointer;
-            margin-bottom: 20px;
-            transition: all 0.3s ease;
+        .btn-sm {
+            padding: 0.25rem 0.5rem;
+            font-size: 0.8rem;
         }
 
-        .toggle-form-btn:hover {
-            background: #c2185b;
-            transform: translateY(-2px);
+        /* Main Content */
+        .container {
+            padding: 2rem;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .page-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .page-title {
+            color: var(--dark-color);
+            font-size: 2rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        .page-subtitle {
+            color: var(--gray);
+            font-size: 1rem;
+        }
+
+        /* Card Styles */
+        .card {
+            background: var(--white);
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+            margin-bottom: 2rem;
+            overflow: hidden;
+        }
+
+        .card-header {
+            background: var(--primary-color);
+            color: var(--white);
+            padding: 1rem 1.5rem;
+            font-size: 1.25rem;
+            font-weight: 500;
+        }
+
+        .card-body {
+            padding: 1.5rem;
+        }
+
+        /* Message Styles */
+        .alert {
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+            border-radius: var(--border-radius);
+            font-weight: 500;
+        }
+
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        /* Form Styles */
+        .form-group {
+            margin-bottom: 1.25rem;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            color: var(--gray-dark);
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid var(--gray-light);
+            border-radius: var(--border-radius);
+            font-size: 1rem;
+            transition: var(--transition);
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 0.2rem rgba(74, 107, 255, 0.25);
+        }
+
+        .form-select {
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
+            background-repeat: no-repeat;
+            background-position: right 0.75rem center;
+            background-size: 16px 12px;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            margin-top: 1.5rem;
+        }
+
+        /* Grid System */
+        .row {
+            display: flex;
+            flex-wrap: wrap;
+            margin: 0 -0.75rem;
+        }
+
+        .col {
+            flex: 1 0 0%;
+            padding: 0 0.75rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .col-12 {
+            flex: 0 0 100%;
+            max-width: 100%;
+        }
+
+        /* Table Styles */
+        .table-responsive {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 1rem;
+        }
+
+        .table th,
+        .table td {
+            padding: 0.75rem;
+            vertical-align: top;
+            border-top: 1px solid var(--gray-light);
+            text-align: left;
+        }
+
+        .table thead th {
+            vertical-align: bottom;
+            border-bottom: 2px solid var(--gray-light);
+            background: var(--light-color);
+            color: var(--gray-dark);
+            font-weight: 600;
+        }
+
+        .table tbody tr:hover {
+            background-color: rgba(0, 0, 0, 0.02);
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 0.35em 0.65em;
+            font-size: 0.75em;
+            font-weight: 700;
+            line-height: 1;
+            text-align: center;
+            white-space: nowrap;
+            vertical-align: baseline;
+            border-radius: 0.25rem;
+        }
+
+        .badge-success {
+            color: #fff;
+            background-color: var(--success-color);
+        }
+
+        .badge-danger {
+            color: #fff;
+            background-color: var(--danger-color);
+        }
+
+        /* Utility Classes */
+        .text-center {
+            text-align: center;
+        }
+
+        .text-muted {
+            color: var(--gray) !important;
         }
 
         .hidden {
+            display: none !important;
+        }
+
+        /* Toggle Button */
+        .toggle-btn {
+            background: var(--primary-color);
+            color: var(--white);
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 2rem;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            margin-bottom: 1.5rem;
+            transition: var(--transition);
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .toggle-btn:hover {
+            background: var(--primary-dark);
+            transform: translateY(-2px);
+        }
+
+        /* Mobile Menu */
+        .mobile-menu-btn {
             display: none;
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            color: var(--gray-dark);
+            cursor: pointer;
         }
 
         /* Responsive Design */
+        @media (max-width: 992px) {
+            .col {
+                flex: 0 0 50%;
+                max-width: 50%;
+            }
+        }
+
         @media (max-width: 768px) {
             .header {
-                flex-direction: column;
-                gap: 15px;
-                padding: 15px;
+                padding: 1rem;
+            }
+
+            .mobile-menu-btn {
+                display: block;
             }
 
             .nav-menu {
-                gap: 15px;
+                display: none;
+                width: 100%;
+                flex-direction: column;
+                margin: 1rem 0 0;
             }
 
-            .form-grid {
-                grid-template-columns: 1fr;
+            .nav-menu.show {
+                display: flex;
             }
 
-            .staff-table {
-                font-size: 12px;
+            .nav-item {
+                width: 100%;
+                text-align: center;
             }
 
-            .staff-table th,
-            .staff-table td {
-                padding: 8px;
+            .user-section {
+                width: 100%;
+                justify-content: center;
+                margin-top: 1rem;
             }
 
-            .action-btns {
+            .col {
+                flex: 0 0 100%;
+                max-width: 100%;
+            }
+
+            .table th, 
+            .table td {
+                padding: 0.5rem;
+                font-size: 0.85rem;
+            }
+
+            .btn-group {
                 flex-direction: column;
             }
+
+            .btn {
+                width: 100%;
+                justify-content: center;
+            }
+        }
+
+        @media (max-width: 576px) {
+            .container {
+                padding: 1rem;
+            }
+
+            .page-title {
+                font-size: 1.5rem;
+            }
+
+            .card-header {
+                padding: 0.75rem 1rem;
+                font-size: 1rem;
+            }
+
+            .card-body {
+                padding: 1rem;
+            }
+
+            .form-control {
+                padding: 0.5rem;
+            }
+
+            .toggle-btn {
+                padding: 0.5rem 1rem;
+                font-size: 0.9rem;
+            }
+        }
+
+        /* Animation */
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .fade-in {
+            animation: fadeIn 0.5s ease-in-out;
         }
     </style>
 </head>
@@ -531,237 +627,303 @@ if (isset($_GET['edit'])) {
     <header class="header">
         <div class="logo-container">
             <img src="janalisu.jpg" alt="Janalisu Logo" class="logo-image">
-            <div class="logo-text">JANALISU EMPOWERMENT GROUP</div>
+            <h1 class="logo-text">JANALISU</h1>
         </div>
         
-        <nav class="nav-menu">
-            <a href="admin_dashboard.php" class="nav-item">Dashboard</a>
-            <a href="students.php" class="nav-item">Students</a>
-            <a href="staffs.php" class="nav-item active">Staff</a>
-            <a href="add_events.php" class="nav-item">Events</a>
+        <button class="mobile-menu-btn" id="mobileMenuBtn">
+            <i class="fas fa-bars"></i>
+        </button>
+        
+        <nav class="nav-menu" id="navMenu">
+            <a href="admin_dashboard.php" class="nav-item"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
+            <a href="students.php" class="nav-item"><i class="fas fa-users"></i> Students</a>
+            <a href="staffs.php" class="nav-item active"><i class="fas fa-user-tie"></i> Staff</a>
+            <a href="add_events.php" class="nav-item"><i class="fas fa-calendar-alt"></i> Events</a>
+            
+            <div class="user-section">
+                <div class="welcome-text">
+                    <div>Welcome,</div>
+                    <strong>Admin</strong>
+                </div>
+                <button class="btn btn-danger" onclick="logout()"><i class="fas fa-sign-out-alt"></i> Logout</button>
+            </div>
         </nav>
-        
-        <div class="user-section">
-            <span class="welcome-text">Welcome,<br>Admin</span>
-            <button class="logout-btn" onclick="logout()">Logout</button>
-        </div>
     </header>
 
     <!-- Main Content -->
-    <main class="main-content">
-        <div class="page-header">
+    <main class="container">
+        <div class="page-header fade-in">
             <h1 class="page-title">Staff Management</h1>
             <p class="page-subtitle">Manage your organization's staff members</p>
         </div>
 
         <!-- Messages -->
         <?php if ($message): ?>
-            <div class="message <?php echo $message_type; ?>">
+            <div class="alert alert-<?php echo $message_type === 'error' ? 'error' : 'success'; ?> fade-in">
                 <?php echo htmlspecialchars($message); ?>
             </div>
         <?php endif; ?>
 
-        <!-- Toggle Form Button -->
-        <button class="toggle-form-btn" onclick="toggleForm()">
-            <?php echo $edit_staff ? 'Edit Staff Member' : '+ Add New Staff Member'; ?>
+        <!-- Toggle Button -->
+        <button class="toggle-btn" id="toggleFormBtn">
+            <i class="fas fa-plus"></i>
+            <?php echo $edit_staff ? 'Edit Staff Member' : 'Add New Staff Member'; ?>
         </button>
 
         <!-- Add/Edit Staff Form -->
-        <div id="staffForm" class="form-container <?php echo !$edit_staff ? 'hidden' : ''; ?>">
-            <h2 class="form-title"><?php echo $edit_staff ? 'Edit Staff Member' : 'Add New Staff Member'; ?></h2>
-            
-            <form method="POST" action="">
-                <input type="hidden" name="action" value="<?php echo $edit_staff ? 'edit' : 'add'; ?>">
-                <?php if ($edit_staff): ?>
-                    <input type="hidden" name="employee_id" value="<?php echo $edit_staff['employee_id']; ?>">
-                <?php endif; ?>
-                
-                <div class="form-grid">
-                    <div class="form-group">
-                        <label class="form-label">First Name *</label>
-                        <input type="text" name="first_name" class="form-input" required
-                               value="<?php echo $edit_staff ? htmlspecialchars($edit_staff['first_name']) : ''; ?>">
+        <div id="staffForm" class="card <?php echo !$edit_staff ? 'hidden' : ''; ?> fade-in">
+            <div class="card-header">
+                <?php echo $edit_staff ? 'Edit Staff Member' : 'Add New Staff Member'; ?>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="">
+                    <input type="hidden" name="action" value="<?php echo $edit_staff ? 'edit' : 'add'; ?>">
+                    <?php if ($edit_staff): ?>
+                        <input type="hidden" name="employee_id" value="<?php echo $edit_staff['employee_id']; ?>">
+                    <?php endif; ?>
+                    
+                    <div class="row">
+                        <div class="col">
+                            <div class="form-group">
+                                <label class="form-label">First Name *</label>
+                                <input type="text" name="first_name" class="form-control" required
+                                       value="<?php echo $edit_staff ? htmlspecialchars($edit_staff['first_name']) : ''; ?>">
+                            </div>
+                        </div>
+                        
+                        <div class="col">
+                            <div class="form-group">
+                                <label class="form-label">Last Name *</label>
+                                <input type="text" name="last_name" class="form-control" required
+                                       value="<?php echo $edit_staff ? htmlspecialchars($edit_staff['last_name']) : ''; ?>">
+                            </div>
+                        </div>
                     </div>
                     
-                    <div class="form-group">
-                        <label class="form-label">Last Name *</label>
-                        <input type="text" name="last_name" class="form-input" required
-                               value="<?php echo $edit_staff ? htmlspecialchars($edit_staff['last_name']) : ''; ?>">
+                    <div class="row">
+                        <div class="col">
+                            <div class="form-group">
+                                <label class="form-label">Email *</label>
+                                <input type="email" name="email" class="form-control" required
+                                       value="<?php echo $edit_staff ? htmlspecialchars($edit_staff['email']) : ''; ?>">
+                            </div>
+                        </div>
+                        
+                        <div class="col">
+                            <div class="form-group">
+                                <label class="form-label">Phone *</label>
+                                <input type="tel" name="phone" class="form-control" required
+                                       value="<?php echo $edit_staff ? htmlspecialchars($edit_staff['phone']) : ''; ?>">
+                            </div>
+                        </div>
                     </div>
                     
-                    <div class="form-group">
-                        <label class="form-label">Email *</label>
-                        <input type="email" name="email" class="form-input" required
-                               value="<?php echo $edit_staff ? htmlspecialchars($edit_staff['email']) : ''; ?>">
+                    <div class="row">
+                        <div class="col">
+                            <div class="form-group">
+                                <label class="form-label">Position *</label>
+                                <input type="text" name="position" class="form-control" required
+                                       value="<?php echo $edit_staff ? htmlspecialchars($edit_staff['position']) : ''; ?>">
+                            </div>
+                        </div>
+                        
+                        <div class="col">
+                            <div class="form-group">
+                                <label class="form-label">Department *</label>
+                                <select name="department" class="form-control form-select" required>
+                                    <option value="">Select Department</option>
+                                    <option value="Administration" <?php echo ($edit_staff && $edit_staff['department'] == 'Administration') ? 'selected' : ''; ?>>Administration</option>
+                                    <option value="Training" <?php echo ($edit_staff && $edit_staff['department'] == 'Training') ? 'selected' : ''; ?>>Training</option>
+                                    <option value="Community Outreach" <?php echo ($edit_staff && $edit_staff['department'] == 'Community Outreach') ? 'selected' : ''; ?>>Community Outreach</option>
+                                    <option value="Finance" <?php echo ($edit_staff && $edit_staff['department'] == 'Finance') ? 'selected' : ''; ?>>Finance</option>
+                                    <option value="Human Resources" <?php echo ($edit_staff && $edit_staff['department'] == 'Human Resources') ? 'selected' : ''; ?>>Human Resources</option>
+                                    <option value="Project Management" <?php echo ($edit_staff && $edit_staff['department'] == 'Project Management') ? 'selected' : ''; ?>>Project Management</option>
+                                </select>
+                            </div>
+                        </div>
                     </div>
                     
-                    <div class="form-group">
-                        <label class="form-label">Phone *</label>
-                        <input type="tel" name="phone" class="form-input" required
-                               value="<?php echo $edit_staff ? htmlspecialchars($edit_staff['phone']) : ''; ?>">
+                    <div class="row">
+                        <div class="col">
+                            <div class="form-group">
+                                <label class="form-label">Salary</label>
+                                <input type="number" name="salary" class="form-control" step="0.01" min="0"
+                                       value="<?php echo $edit_staff ? $edit_staff['salary'] : ''; ?>">
+                            </div>
+                        </div>
+                        
+                        <div class="col">
+                            <div class="form-group">
+                                <label class="form-label">Hire Date</label>
+                                <input type="date" name="hire_date" class="form-control"
+                                       value="<?php echo $edit_staff ? $edit_staff['hire_date'] : ''; ?>">
+                            </div>
+                        </div>
                     </div>
                     
-                    <div class="form-group">
-                        <label class="form-label">Position *</label>
-                        <input type="text" name="position" class="form-input" required
-                               value="<?php echo $edit_staff ? htmlspecialchars($edit_staff['position']) : ''; ?>">
+                    <div class="row">
+                        <div class="col">
+                            <div class="form-group">
+                                <label class="form-label">Status</label>
+                                <select name="status" class="form-control form-select">
+                                    <option value="Active" <?php echo ($edit_staff && $edit_staff['status'] == 'Active') ? 'selected' : ''; ?>>Active</option>
+                                    <option value="Inactive" <?php echo ($edit_staff && $edit_staff['status'] == 'Inactive') ? 'selected' : ''; ?>>Inactive</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="col">
+                            <div class="form-group">
+                                <label class="form-label">Password <?php echo $edit_staff ? '(Leave blank to keep current)' : '*'; ?></label>
+                                <input type="password" name="password" class="form-control" <?php echo !$edit_staff ? 'required' : ''; ?>>
+                            </div>
+                        </div>
                     </div>
                     
-                    <div class="form-group">
-                        <label class="form-label">Department *</label>
-                        <select name="department" class="form-input" required>
-                            <option value="">Select Department</option>
-                            <option value="Administration" <?php echo ($edit_staff && $edit_staff['department'] == 'Administration') ? 'selected' : ''; ?>>Administration</option>
-                            <option value="Training" <?php echo ($edit_staff && $edit_staff['department'] == 'Training') ? 'selected' : ''; ?>>Training</option>
-                            <option value="Community Outreach" <?php echo ($edit_staff && $edit_staff['department'] == 'Community Outreach') ? 'selected' : ''; ?>>Community Outreach</option>
-                            <option value="Finance" <?php echo ($edit_staff && $edit_staff['department'] == 'Finance') ? 'selected' : ''; ?>>Finance</option>
-                            <option value="Human Resources" <?php echo ($edit_staff && $edit_staff['department'] == 'Human Resources') ? 'selected' : ''; ?>>Human Resources</option>
-                            <option value="Project Management" <?php echo ($edit_staff && $edit_staff['department'] == 'Project Management') ? 'selected' : ''; ?>>Project Management</option>
-                        </select>
+                    <div class="row">
+                        <div class="col-12">
+                            <div class="form-group">
+                                <label class="form-label">Address</label>
+                                <textarea name="address" class="form-control" rows="3"><?php echo $edit_staff ? htmlspecialchars($edit_staff['address']) : ''; ?></textarea>
+                            </div>
+                        </div>
                     </div>
                     
-                    <div class="form-group">
-                        <label class="form-label">Salary</label>
-                        <input type="number" name="salary" class="form-input" step="0.01" min="0"
-                               value="<?php echo $edit_staff ? $edit_staff['salary'] : ''; ?>">
+                    <div class="btn-group">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save"></i> <?php echo $edit_staff ? 'Update Staff' : 'Add Staff'; ?>
+                        </button>
+                        <button type="button" class="btn btn-secondary" onclick="cancelForm()">
+                            <i class="fas fa-times"></i> Cancel
+                        </button>
                     </div>
-                    
-                    <div class="form-group">
-                        <label class="form-label">Hire Date</label>
-                        <input type="date" name="hire_date" class="form-input"
-                               value="<?php echo $edit_staff ? $edit_staff['hire_date'] : ''; ?>">
-                    </div>
-                    
-                    <div class="form-group">
-                        <label class="form-label">Status</label>
-                        <select name="status" class="form-input">
-                            <option value="Active" <?php echo ($edit_staff && $edit_staff['status'] == 'Active') ? 'selected' : ''; ?>>Active</option>
-                            <option value="Inactive" <?php echo ($edit_staff && $edit_staff['status'] == 'Inactive') ? 'selected' : ''; ?>>Inactive</option>
-                        </select>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label class="form-label">Password <?php echo $edit_staff ? '(Leave blank to keep current)' : '*'; ?></label>
-                        <input type="password" name="password" class="form-input" <?php echo !$edit_staff ? 'required' : ''; ?>>
-                    </div>
-                    
-                    <div class="form-group full-width">
-                        <label class="form-label">Address</label>
-                        <textarea name="address" class="form-textarea"><?php echo $edit_staff ? htmlspecialchars($edit_staff['address']) : ''; ?></textarea>
-                    </div>
-                </div>
-                
-                <div class="btn-container">
-                    <button type="submit" class="btn btn-primary">
-                        <?php echo $edit_staff ? 'Update Staff' : 'Add Staff'; ?>
-                    </button>
-                    <button type="button" class="btn btn-secondary" onclick="cancelForm()">Cancel</button>
-                </div>
-            </form>
+                </form>
+            </div>
         </div>
 
         <!-- Staff List -->
-        <div class="staff-list">
-            <div class="list-header">
+        <div class="card fade-in">
+            <div class="card-header">
                 Staff Members (<?php echo count($staff_members); ?> total)
             </div>
             
-            <?php if (empty($staff_members)): ?>
-                <div style="padding: 40px; text-align: center; color: #666;">
-                    No staff members found. Add your first staff member above.
-                </div>
-            <?php else: ?>
-                <table class="staff-table">
-                    <thead>
-                        <tr>
-                            <th>Name</th>
-                            <th>Email</th>
-                            <th>Position</th>
-                            <th>Department</th>
-                            <th>Hire Date</th>
-                            <th>Status</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach ($staff_members as $staff): ?>
-                            <tr>
-                                <td><?php echo htmlspecialchars($staff['first_name'] . ' ' . $staff['last_name']); ?></td>
-                                <td><?php echo htmlspecialchars($staff['email']); ?></td>
-                                <td><?php echo htmlspecialchars($staff['position']); ?></td>
-                                <td><?php echo htmlspecialchars($staff['department']); ?></td>
-                                <td><?php echo $staff['hire_date'] ? date('M j, Y', strtotime($staff['hire_date'])) : 'N/A'; ?></td>
-                                <td>
-                                    <span class="status-badge <?php echo $staff['status'] == 'Active' ? 'status-active' : 'status-inactive'; ?>">
-                                        <?php echo $staff['status']; ?>
-                                    </span>
-                                </td>
-                                <td>
-                                    <div class="action-btns">
-                                        <a href="?edit=<?php echo $staff['employee_id']; ?>" class="btn btn-small btn-edit">Edit</a>
-                                        <form method="POST" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this staff member?');">
-                                            <input type="hidden" name="action" value="delete">
-                                            <input type="hidden" name="employee_id" value="<?php echo $staff['employee_id']; ?>">
-                                            <button type="submit" class="btn btn-small btn-delete">Delete</button>
-                                        </form>
-                                    </div>
-                                </td>
-                            </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
-            <?php endif; ?>
+            <div class="card-body">
+                <?php if (empty($staff_members)): ?>
+                    <div class="text-center text-muted py-4">
+                        <i class="fas fa-user-tie fa-3x mb-3"></i>
+                        <h4>No staff members found</h4>
+                        <p>Add your first staff member using the button above</p>
+                    </div>
+                <?php else: ?>
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Position</th>
+                                    <th>Department</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($staff_members as $staff): ?>
+                                    <tr>
+                                        <td>
+                                            <strong><?php echo htmlspecialchars($staff['first_name'] . ' ' . $staff['last_name']); ?></strong><br>
+                                            <small class="text-muted"><?php echo htmlspecialchars($staff['email']); ?></small>
+                                        </td>
+                                        <td><?php echo htmlspecialchars($staff['position']); ?></td>
+                                        <td><?php echo htmlspecialchars($staff['department']); ?></td>
+                                        <td>
+                                            <span class="badge <?php echo $staff['status'] == 'Active' ? 'badge-success' : 'badge-danger'; ?>">
+                                                <?php echo $staff['status']; ?>
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <div class="d-flex gap-2">
+                                                <a href="?edit=<?php echo $staff['employee_id']; ?>" class="btn btn-success btn-sm">
+                                                    <i class="fas fa-edit"></i> Edit
+                                                </a>
+                                                <form method="POST" onsubmit="return confirm('Are you sure you want to delete this staff member?');">
+                                                    <input type="hidden" name="action" value="delete">
+                                                    <input type="hidden" name="employee_id" value="<?php echo $staff['employee_id']; ?>">
+                                                    <button type="submit" class="btn btn-danger btn-sm">
+                                                        <i class="fas fa-trash-alt"></i> Delete
+                                                    </button>
+                                                </form>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                <?php endif; ?>
+            </div>
         </div>
     </main>
 
     <script>
+        // Mobile menu toggle
+        document.getElementById('mobileMenuBtn').addEventListener('click', function() {
+            document.getElementById('navMenu').classList.toggle('show');
+        });
+
         // Toggle form visibility
+        const toggleFormBtn = document.getElementById('toggleFormBtn');
+        const staffForm = document.getElementById('staffForm');
+        
         function toggleForm() {
-            const form = document.getElementById('staffForm');
-            const button = document.querySelector('.toggle-form-btn');
-            
-            if (form.classList.contains('hidden')) {
-                form.classList.remove('hidden');
-                button.textContent = 'Cancel';
+            staffForm.classList.toggle('hidden');
+            if (staffForm.classList.contains('hidden')) {
+                toggleFormBtn.innerHTML = '<i class="fas fa-plus"></i> Add New Staff Member';
+                // Clear edit mode if form is hidden
+                if (window.location.search.includes('edit=')) {
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                }
             } else {
-                form.classList.add('hidden');
-                button.textContent = '+ Add New Staff Member';
+                toggleFormBtn.innerHTML = '<i class="fas fa-times"></i> Cancel';
             }
         }
+        
+        toggleFormBtn.addEventListener('click', toggleForm);
 
         // Cancel form
         function cancelForm() {
-            window.location.href = 'staffs.php';
+            staffForm.classList.add('hidden');
+            toggleFormBtn.innerHTML = '<i class="fas fa-plus"></i> Add New Staff Member';
+            // Clear edit mode
+            if (window.location.search.includes('edit=')) {
+                window.history.replaceState({}, document.title, window.location.pathname);
+            }
         }
 
         // Logout function
         function logout() {
             if (confirm('Are you sure you want to logout?')) {
-                window.location.href = 'login.php';
+                window.location.href = 'home.php';
             }
         }
 
-        // Form animations
-        document.addEventListener('DOMContentLoaded', function() {
-            // Add fade-in animation
-            document.body.style.opacity = '0';
-            document.body.style.transition = 'opacity 0.5s ease-in-out';
-            
+        // Auto-hide messages after 5 seconds
+        const messages = document.querySelectorAll('.alert');
+        messages.forEach(message => {
             setTimeout(() => {
-                document.body.style.opacity = '1';
-            }, 100);
-
-            // Auto-hide messages after 5 seconds
-            const messages = document.querySelectorAll('.message');
-            messages.forEach(message => {
+                message.style.opacity = '0';
                 setTimeout(() => {
-                    message.style.opacity = '0';
-                    setTimeout(() => {
-                        message.remove();
-                    }, 300);
-                }, 5000);
-            });
+                    message.remove();
+                }, 300);
+            }, 5000);
         });
+
+        // If in edit mode, ensure form is visible
+        <?php if ($edit_staff): ?>
+            document.addEventListener('DOMContentLoaded', function() {
+                staffForm.classList.remove('hidden');
+                toggleFormBtn.innerHTML = '<i class="fas fa-times"></i> Cancel';
+            });
+        <?php endif; ?>
     </script>
 </body>
 </html>
