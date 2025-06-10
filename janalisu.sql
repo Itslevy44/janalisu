@@ -13,10 +13,6 @@ CREATE TABLE students (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-
-
-
-
 CREATE TABLE employees (
     employee_id INT AUTO_INCREMENT PRIMARY KEY,
     first_name VARCHAR(50) NOT NULL,
@@ -33,37 +29,31 @@ CREATE TABLE employees (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-
-
-
 CREATE TABLE events (
     event_id INT AUTO_INCREMENT PRIMARY KEY,
-    event_title VARCHAR(150) NOT NULL,
+    title VARCHAR(150) NOT NULL,
     description TEXT,
     event_date DATE NOT NULL,
-    event_time TIME NOT NULL,
+    start_time TIME NOT NULL,
+    end_time TIME,
     location VARCHAR(255) NOT NULL,
-    max_participants INT,
-    event_type VARCHAR(100),
+    organizer VARCHAR(100),
     status ENUM('Scheduled', 'Ongoing', 'Completed', 'Cancelled') DEFAULT 'Scheduled',
-    image VARCHAR(255),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-
-
-
-CREATE TABLE admins (
-    admin_id INT AUTO_INCREMENT PRIMARY KEY,
-    first_name VARCHAR(50) NOT NULL,
-    last_name VARCHAR(50) NOT NULL,
+CREATE TABLE IF NOT EXISTS admins (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(50) NOT NULL UNIQUE,
     email VARCHAR(100) NOT NULL UNIQUE,
     password VARCHAR(255) NOT NULL,
-    position VARCHAR(100) NOT NULL,
-    department VARCHAR(100) NOT NULL,
-    phone VARCHAR(20),
-    address TEXT,
-    status ENUM('Active', 'Inactive') DEFAULT 'Active',
+    full_name VARCHAR(100) NOT NULL,
+    role ENUM('super_admin', 'admin', 'moderator') DEFAULT 'admin',
+    status ENUM('active', 'inactive', 'pending') DEFAULT 'active',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    last_login TIMESTAMP NULL,
+    INDEX idx_username (username),
+    INDEX idx_email (email),
+    INDEX idx_status (status)
 );

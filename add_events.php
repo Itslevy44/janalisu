@@ -1,1258 +1,958 @@
 <?php
-require_once 'config.php'; // Use config for DB and session
+// Include configuration file
+require_once 'config.php';
 
-// Handle form submission for adding new event
+// Start session if not active
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+try {
+    // Create database connection
+    $pdo = new PDO(
+        "mysql:host=" . DB_HOST . ";dbname=" . DB_NAME . ";charset=utf8mb4",
+        DB_USER,
+        DB_PASS,
+        [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            PDO::ATTR_EMULATE_PREPARES => false
+        ]
+    );
+} catch(PDOException $e) {
+    die("Database connection failed: " . $e->getMessage());
+}
+
+// Initialize message variables
 $message = '';
 $message_type = '';
 
-if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['add_event'])) {
-    $event_title = trim($_POST['event_title']);
-    $description = trim($_POST['description']);
-    $event_date = $_POST['event_date'];
-    $event_time = $_POST['event_time'];
-    $location = trim($_POST['location']);
-    $max_participants = $_POST['max_participants'];
-    $event_type = trim($_POST['event_type']);
-    $status = $_POST['status'];
-    
-    // Handle image upload
-    $image_name = '';
-    if (isset($_FILES['event_image']) && $_FILES['event_image']['error'] == 0) {
-        $allowed_types = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif'];
-        $file_type = $_FILES['event_image']['type'];
-        
-        if (in_array($file_type, $allowed_types)) {
-            $upload_dir = 'uploads/events/';
-            if (!file_exists($upload_dir)) {
-                mkdir($upload_dir, 0777, true);
-            }
-            
-            $file_extension = pathinfo($_FILES['event_image']['name'], PATHINFO_EXTENSION);
-            $image_name = 'event_' . time() . '_' . rand(1000, 9999) . '.' . $file_extension;
-            $upload_path = $upload_dir . $image_name;
-            
-            if (!move_uploaded_file($_FILES['event_image']['tmp_name'], $upload_path)) {
-                $message = "Error uploading image file.";
-                $message_type = "error";
-            } else {
-                $image_name = $upload_path;
-            }
-        } else {
-            $message = "Please upload a valid image file (JPEG, PNG, GIF).";
-            $message_type = "error";
-        }
-    }
-    
-    // Insert into database if no upload errors
-    if (empty($message)) {
-        try {
-            $sql = "INSERT INTO events (event_title, description, event_date, event_time, location, max_participants, event_type, status, image) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
-            $stmt = $pdo->prepare($sql);
-            
-            if ($stmt->execute([$event_title, $description, $event_date, $event_time, $location, $max_participants, $event_type, $status, $image_name])) {
+// Handle form submissions
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
+    try {
+        switch ($_POST['action']) {
+            case 'add':
+                // Add new event
+                $stmt = $pdo->prepare("INSERT INTO events (title, description, event_date, start_time, end_time, location, organizer, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+                $stmt->execute([
+                    $_POST['title'],
+                    $_POST['description'],
+                    $_POST['event_date'],
+                    $_POST['start_time'],
+                    $_POST['end_time'],
+                    $_POST['location'],
+                    $_POST['organizer'],
+                    $_POST['status']
+                ]);
                 $message = "Event added successfully!";
                 $message_type = "success";
-            } else {
-                $message = "Error adding event.";
-                $message_type = "error";
-            }
-        } catch(PDOException $e) {
-            $message = "Database error: " . $e->getMessage();
-            $message_type = "error";
+                break;
+                
+            case 'edit':
+                // Update existing event
+                $stmt = $pdo->prepare("UPDATE events SET 
+                    title = ?, 
+                    description = ?, 
+                    event_date = ?, 
+                    start_time = ?, 
+                    end_time = ?, 
+                    location = ?, 
+                    organizer = ?, 
+                    status = ? 
+                WHERE event_id = ?");
+                
+                $stmt->execute([
+                    $_POST['title'],
+                    $_POST['description'],
+                    $_POST['event_date'],
+                    $_POST['start_time'],
+                    $_POST['end_time'],
+                    $_POST['location'],
+                    $_POST['organizer'],
+                    $_POST['status'],
+                    $_POST['event_id']
+                ]);
+                $message = "Event updated successfully!";
+                $message_type = "success";
+                break;
+                
+            case 'delete':
+                // Delete event
+                $stmt = $pdo->prepare("DELETE FROM events WHERE event_id = ?");
+                $stmt->execute([$_POST['event_id']]);
+                $message = "Event deleted successfully!";
+                $message_type = "success";
+                break;
         }
+    } catch(PDOException $e) {
+        $message = "Database error: " . $e->getMessage();
+        $message_type = "error";
+    } catch(Exception $e) {
+        $message = "Error: " . $e->getMessage();
+        $message_type = "error";
     }
 }
 
-// Fetch existing events
+// Fetch all events
 try {
-    $stmt = $pdo->query("SELECT * FROM events ORDER BY event_date DESC, created_at DESC");
-    $events = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $stmt = $pdo->query("SELECT * FROM events ORDER BY event_date DESC, start_time ASC");
+    $events = $stmt->fetchAll();
 } catch(PDOException $e) {
     $events = [];
     $message = "Error fetching events: " . $e->getMessage();
     $message_type = "error";
 }
-?>
 
+// Get event for editing
+$edit_event = null;
+if (isset($_GET['edit']) && is_numeric($_GET['edit'])) {
+    try {
+        $stmt = $pdo->prepare("SELECT * FROM events WHERE event_id = ?");
+        $stmt->execute([$_GET['edit']]);
+        $edit_event = $stmt->fetch();
+    } catch(PDOException $e) {
+        $message = "Error fetching event details: " . $e->getMessage();
+        $message_type = "error";
+    }
+}
+?>
 
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>JANALISU - Events Management</title>
+    <title>Event Management - JANALISU Admin</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
+        :root {
+            --primary-color: #4a6bff;
+            --primary-dark: #3a56cc;
+            --secondary-color: #6c757d;
+            --success-color: #28a745;
+            --danger-color: #dc3545;
+            --warning-color: #ffc107;
+            --info-color: #17a2b8;
+            --light-color: #f8f9fa;
+            --dark-color: #343a40;
+            --white: #ffffff;
+            --gray-light: #e9ecef;
+            --gray: #6c757d;
+            --gray-dark: #495057;
+            --border-radius: 0.375rem;
+            --box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+            --transition: all 0.3s ease;
+        }
+
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
 
-        :root {
-            --primary-color: #e91e63;
-            --primary-dark: #ad1457;
-            --secondary-color: #667eea;
-            --secondary-dark: #5a6fd8;
-            --accent-color: #764ba2;
-            --success-color: #4caf50;
-            --error-color: #f44336;
-            --warning-color: #ff9800;
-            --info-color: #2196f3;
-            --dark-color: #333;
-            --light-color: #f8f9fa;
-            --white: #ffffff;
-            --gray-100: #f8f9fa;
-            --gray-200: #e9ecef;
-            --gray-300: #dee2e6;
-            --gray-400: #ced4da;
-            --gray-500: #adb5bd;
-            --gray-600: #6c757d;
-            --gray-700: #495057;
-            --gray-800: #343a40;
-            --gray-900: #212529;
-            --shadow-sm: 0 2px 4px rgba(0,0,0,0.1);
-            --shadow-md: 0 4px 12px rgba(0,0,0,0.15);
-            --shadow-lg: 0 8px 25px rgba(0,0,0,0.15);
-            --shadow-xl: 0 15px 35px rgba(0,0,0,0.2);
-            --border-radius-sm: 6px;
-            --border-radius-md: 10px;
-            --border-radius-lg: 15px;
-            --border-radius-xl: 20px;
-            --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: linear-gradient(135deg, var(--secondary-color) 0%, var(--accent-color) 100%);
-            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f7fa;
+            color: #333;
             line-height: 1.6;
-            color: var(--dark-color);
         }
 
-        /* Header Styles - Mobile First */
+        /* Header Styles */
         .header {
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-            padding: 1rem;
-            box-shadow: var(--shadow-md);
+            background: var(--white);
+            padding: 1rem 2rem;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
             position: sticky;
             top: 0;
             z-index: 1000;
         }
 
-        .header-content {
-            max-width: 1400px;
-            margin: 0 auto;
-            display: flex;
-            flex-direction: column;
-            gap: 1rem;
-            align-items: center;
-        }
-
         .logo-container {
             display: flex;
             align-items: center;
-            gap: 0.75rem;
-            text-align: center;
+            gap: 1rem;
+            margin-right: 1rem;
         }
 
         .logo-image {
-            width: 50px;
-            height: 50px;
+            width: 60px;
+            height: 60px;
             border-radius: 50%;
             object-fit: cover;
-            border: 2px solid transparent;
-            background: linear-gradient(white, white) padding-box,
-                        linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 50%, var(--info-color) 100%) border-box;
-            box-shadow: var(--shadow-sm);
+            border: 3px solid transparent;
+            background: linear-gradient(var(--white), var(--white)) padding-box,
+                        linear-gradient(135deg, var(--danger-color) 0%, var(--primary-color) 50%, var(--info-color) 100%) border-box;
+            box-shadow: var(--box-shadow);
+            transition: var(--transition);
         }
 
         .logo-text {
-            font-size: 1.2rem;
-            font-weight: 700;
-            background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 50%, var(--info-color) 100%);
+            font-size: 1.5rem;
+            font-weight: bold;
+            background: linear-gradient(135deg, var(--danger-color) 0%, var(--primary-color) 50%, var(--info-color) 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
-            line-height: 1.2;
         }
 
         .nav-menu {
             display: flex;
-            flex-wrap: wrap;
-            gap: 0.5rem;
-            justify-content: center;
+            gap: 1rem;
+            align-items: center;
+            margin: 1rem 0;
         }
 
         .nav-item {
             padding: 0.5rem 1rem;
             text-decoration: none;
-            color: var(--gray-600);
+            color: var(--gray);
             font-weight: 500;
-            border-radius: var(--border-radius-xl);
+            border-radius: 2rem;
             transition: var(--transition);
             font-size: 0.9rem;
-            white-space: nowrap;
         }
 
         .nav-item.active {
             background: var(--primary-color);
             color: var(--white);
-            box-shadow: var(--shadow-sm);
         }
 
-        .nav-item:hover:not(.active) {
-            background: var(--gray-100);
+        .nav-item:hover {
+            background: var(--gray-light);
             color: var(--dark-color);
         }
 
-        .back-btn {
-            background: var(--secondary-color);
-            color: var(--white);
-            padding: 0.5rem 1rem;
-            border: none;
-            border-radius: var(--border-radius-xl);
-            text-decoration: none;
-            font-weight: 500;
-            font-size: 0.9rem;
-            transition: var(--transition);
+        .nav-item.active:hover {
+            background: var(--primary-dark);
         }
 
-        .back-btn:hover {
-            background: var(--secondary-dark);
-            transform: translateY(-1px);
-            box-shadow: var(--shadow-sm);
+        .user-section {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .welcome-text {
+            color: var(--gray);
+            font-size: 0.8rem;
+            text-align: right;
+        }
+
+        .btn {
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 2rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: var(--transition);
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.9rem;
+        }
+
+        .btn-primary {
+            background: var(--primary-color);
+            color: var(--white);
+        }
+
+        .btn-primary:hover {
+            background: var(--primary-dark);
+            transform: translateY(-2px);
+        }
+
+        .btn-secondary {
+            background: var(--secondary-color);
+            color: var(--white);
+        }
+
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+
+        .btn-success {
+            background: var(--success-color);
+            color: var(--white);
+        }
+
+        .btn-success:hover {
+            background: #218838;
+        }
+
+        .btn-danger {
+            background: var(--danger-color);
+            color: var(--white);
+        }
+
+        .btn-danger:hover {
+            background: #c82333;
+        }
+
+        .btn-sm {
+            padding: 0.25rem 0.5rem;
+            font-size: 0.8rem;
         }
 
         /* Main Content */
         .container {
+            padding: 2rem;
             max-width: 1400px;
             margin: 0 auto;
-            padding: 1rem;
         }
 
         .page-header {
             text-align: center;
             margin-bottom: 2rem;
-            padding: 1rem 0;
         }
 
         .page-title {
-            color: var(--white);
-            font-size: clamp(1.8rem, 4vw, 2.5rem);
-            font-weight: 300;
+            color: var(--dark-color);
+            font-size: 2rem;
+            font-weight: 600;
             margin-bottom: 0.5rem;
         }
 
         .page-subtitle {
-            color: rgba(255, 255, 255, 0.8);
-            font-size: clamp(0.9rem, 2vw, 1.1rem);
+            color: var(--gray);
+            font-size: 1rem;
         }
 
-        /* Message Styles */
-        .message {
-            padding: 1rem;
-            border-radius: var(--border-radius-md);
-            margin-bottom: 1.5rem;
-            font-weight: 500;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .message.success {
-            background: #d4edda;
-            color: #155724;
-            border-left: 4px solid var(--success-color);
-        }
-
-        .message.error {
-            background: #f8d7da;
-            color: #721c24;
-            border-left: 4px solid var(--error-color);
-        }
-
-        /* Tab Navigation */
-        .tab-navigation {
-            display: flex;
+        /* Card Styles */
+        .card {
             background: var(--white);
-            border-radius: var(--border-radius-lg);
-            padding: 0.25rem;
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
             margin-bottom: 2rem;
-            box-shadow: var(--shadow-md);
             overflow: hidden;
         }
 
-        .tab-btn {
-            flex: 1;
-            padding: 0.75rem 1rem;
-            background: transparent;
-            border: none;
-            border-radius: var(--border-radius-md);
-            font-size: clamp(0.9rem, 2vw, 1rem);
-            font-weight: 500;
-            cursor: pointer;
-            transition: var(--transition);
-            color: var(--gray-600);
-            text-align: center;
-        }
-
-        .tab-btn.active {
+        .card-header {
             background: var(--primary-color);
             color: var(--white);
-            box-shadow: var(--shadow-sm);
+            padding: 1rem 1.5rem;
+            font-size: 1.25rem;
+            font-weight: 500;
         }
 
-        .tab-btn:hover:not(.active) {
-            background: var(--gray-100);
+        .card-body {
+            padding: 1.5rem;
+        }
+
+        /* Message Styles */
+        .alert {
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+            border-radius: var(--border-radius);
+            font-weight: 500;
+        }
+
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
         }
 
         /* Form Styles */
-        .form-container {
-            background: var(--white);
-            padding: clamp(1rem, 3vw, 2rem);
-            border-radius: var(--border-radius-lg);
-            box-shadow: var(--shadow-lg);
-            margin-bottom: 2rem;
+        .form-group {
+            margin-bottom: 1.25rem;
         }
 
-        .form-grid {
-            display: grid;
-            grid-template-columns: 1fr;
+        .form-label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            color: var(--gray-dark);
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid var(--gray-light);
+            border-radius: var(--border-radius);
+            font-size: 1rem;
+            transition: var(--transition);
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 0.2rem rgba(74, 107, 255, 0.25);
+        }
+
+        .form-select {
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
+            background-repeat: no-repeat;
+            background-position: right 0.75rem center;
+            background-size: 16px 12px;
+        }
+
+        .btn-group {
+            display: flex;
             gap: 1rem;
+            justify-content: center;
+            margin-top: 1.5rem;
+        }
+
+        /* Grid System */
+        .row {
+            display: flex;
+            flex-wrap: wrap;
+            margin: 0 -0.75rem;
+        }
+
+        .col {
+            flex: 1 0 0%;
+            padding: 0 0.75rem;
             margin-bottom: 1.5rem;
         }
 
-        .form-group {
-            display: flex;
-            flex-direction: column;
+        .col-12 {
+            flex: 0 0 100%;
+            max-width: 100%;
         }
 
-        .form-group.full-width {
-            grid-column: 1 / -1;
-        }
-
-        label {
-            font-weight: 600;
-            color: var(--dark-color);
-            margin-bottom: 0.5rem;
-            font-size: 0.9rem;
-        }
-
-        input, select, textarea {
-            padding: 0.75rem;
-            border: 2px solid var(--gray-300);
-            border-radius: var(--border-radius-sm);
-            font-size: 1rem;
-            transition: var(--transition);
-            font-family: inherit;
-        }
-
-        input:focus, select:focus, textarea:focus {
-            outline: none;
-            border-color: var(--primary-color);
-            box-shadow: 0 0 0 3px rgba(233, 30, 99, 0.1);
-        }
-
-        textarea {
-            resize: vertical;
-            min-height: 100px;
-        }
-
-        .file-input-wrapper {
-            position: relative;
-            display: inline-block;
-            width: 100%;
-        }
-
-        .file-input {
-            width: 100%;
-            padding: 0.75rem;
-            border: 2px dashed var(--gray-300);
-            border-radius: var(--border-radius-sm);
-            background: var(--gray-100);
-            cursor: pointer;
-            transition: var(--transition);
-            text-align: center;
-        }
-
-        .file-input:hover {
-            border-color: var(--primary-color);
-            background: #fef7f7;
-        }
-
-        .submit-btn {
-            background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
-            color: var(--white);
-            padding: 0.875rem 2rem;
-            border: none;
-            border-radius: var(--border-radius-xl);
-            font-size: 1rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: var(--transition);
-            margin-top: 1rem;
-            width: 100%;
-        }
-
-        .submit-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: var(--shadow-md);
-        }
-
-        .submit-btn:active {
-            transform: translateY(0);
-        }
-
-        /* Events Grid */
-        .events-grid {
+        /* Event Card Styles */
+        .event-cards {
             display: grid;
-            grid-template-columns: 1fr;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
             gap: 1.5rem;
         }
 
         .event-card {
             background: var(--white);
-            border-radius: var(--border-radius-lg);
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
             overflow: hidden;
-            box-shadow: var(--shadow-md);
             transition: var(--transition);
         }
 
         .event-card:hover {
-            transform: translateY(-4px);
-            box-shadow: var(--shadow-xl);
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
         }
 
-        .event-image {
-            width: 100%;
-            height: 200px;
-            object-fit: cover;
-            background: linear-gradient(135deg, var(--secondary-color), var(--accent-color));
-            display: flex;
-            align-items: center;
-            justify-content: center;
+        .event-header {
+            background: var(--primary-color);
             color: var(--white);
-            font-size: 2rem;
+            padding: 1rem;
+            position: relative;
         }
 
-        .event-content {
-            padding: 1.5rem;
+        .event-date {
+            position: absolute;
+            top: -10px;
+            right: 10px;
+            background: var(--warning-color);
+            color: var(--dark-color);
+            font-weight: bold;
+            padding: 0.5rem;
+            border-radius: var(--border-radius);
+            font-size: 0.9rem;
         }
 
         .event-title {
             font-size: 1.25rem;
-            font-weight: 600;
-            color: var(--dark-color);
-            margin-bottom: 0.75rem;
-            line-height: 1.3;
+            margin-bottom: 0.5rem;
+            padding-right: 80px;
         }
 
-        .event-meta {
-            display: flex;
-            flex-direction: column;
-            gap: 0.5rem;
-            margin-bottom: 1rem;
-            font-size: 0.9rem;
-            color: var(--gray-600);
+        .event-body {
+            padding: 1.25rem;
         }
 
-        .event-meta span {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .event-description {
-            color: var(--gray-600);
-            line-height: 1.5;
-            margin-bottom: 1rem;
-            font-size: 0.95rem;
-        }
-
-        .event-footer {
+        .event-details {
             display: flex;
             flex-direction: column;
             gap: 0.75rem;
+            margin-bottom: 1rem;
+        }
+
+        .event-detail {
+            display: flex;
             align-items: flex-start;
+            gap: 0.75rem;
+        }
+
+        .event-detail i {
+            color: var(--primary-color);
+            min-width: 20px;
+        }
+
+        .event-description {
+            margin: 1rem 0;
+            color: var(--gray);
+            line-height: 1.6;
         }
 
         .event-status {
             display: inline-block;
-            padding: 0.25rem 0.75rem;
-            border-radius: var(--border-radius-xl);
-            font-size: 0.75rem;
-            font-weight: 600;
-            text-transform: uppercase;
+            padding: 0.35em 0.65em;
+            font-size: 0.75em;
+            font-weight: 700;
+            line-height: 1;
+            text-align: center;
+            white-space: nowrap;
+            vertical-align: baseline;
+            border-radius: 0.25rem;
         }
 
-        .status-scheduled {
-            background: #e3f2fd;
-            color: #1976d2;
+        .status-upcoming {
+            background-color: var(--info-color);
+            color: var(--white);
         }
 
         .status-ongoing {
-            background: #fff3e0;
-            color: #f57c00;
+            background-color: var(--success-color);
+            color: var(--white);
         }
 
         .status-completed {
-            background: #e8f5e8;
-            color: #388e3c;
+            background-color: var(--secondary-color);
+            color: var(--white);
         }
 
         .status-cancelled {
-            background: #ffebee;
-            color: #d32f2f;
-        }
-
-        .participants-info {
-            font-size: 0.8rem;
-            color: var(--gray-500);
-            font-weight: 500;
-        }
-
-        /* Tab Content */
-        .tab-content {
-            display: none;
-        }
-
-        .tab-content.active {
-            display: block;
-            animation: fadeIn 0.3s ease-in-out;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        .empty-state {
-            text-align: center;
+            background-color: var(--danger-color);
             color: var(--white);
-            padding: 3rem 1rem;
-            grid-column: 1 / -1;
         }
 
-        .empty-state h3 {
-            font-size: 1.5rem;
-            margin-bottom: 0.5rem;
+        /* Utility Classes */
+        .text-center {
+            text-align: center;
         }
 
-        .empty-state p {
-            opacity: 0.8;
+        .text-muted {
+            color: var(--gray) !important;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        /* Toggle Button */
+        .toggle-btn {
+            background: var(--primary-color);
+            color: var(--white);
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 2rem;
             font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            margin-bottom: 1.5rem;
+            transition: var(--transition);
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
         }
 
-        /* Mobile Menu Toggle */
-        .mobile-menu-toggle {
+        .toggle-btn:hover {
+            background: var(--primary-dark);
+            transform: translateY(-2px);
+        }
+
+        /* Mobile Menu */
+        .mobile-menu-btn {
             display: none;
             background: none;
             border: none;
             font-size: 1.5rem;
+            color: var(--gray-dark);
             cursor: pointer;
-            color: var(--dark-color);
         }
 
         /* Responsive Design */
-        @media (min-width: 480px) {
-            .container {
-                padding: 1.5rem;
-            }
-            
-            .form-grid {
-                grid-template-columns: repeat(2, 1fr);
-            }
-            
-            .events-grid {
-                grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            }
-            
-            .event-meta {
-                flex-direction: row;
-                flex-wrap: wrap;
-                gap: 1rem;
-            }
-            
-            .event-footer {
-                flex-direction: row;
-                justify-content: space-between;
-                align-items: center;
+        @media (max-width: 992px) {
+            .col {
+                flex: 0 0 50%;
+                max-width: 50%;
             }
         }
 
-        @media (min-width: 768px) {
-            .header-content {
-                flex-direction: row;
-                justify-content: space-between;
+        @media (max-width: 768px) {
+            .header {
+                padding: 1rem;
             }
-            
-            .logo-image {
-                width: 60px;
-                height: 60px;
+
+            .mobile-menu-btn {
+                display: block;
             }
-            
-            .logo-text {
+
+            .nav-menu {
+                display: none;
+                width: 100%;
+                flex-direction: column;
+                margin: 1rem 0 0;
+            }
+
+            .nav-menu.show {
+                display: flex;
+            }
+
+            .nav-item {
+                width: 100%;
+                text-align: center;
+            }
+
+            .user-section {
+                width: 100%;
+                justify-content: center;
+                margin-top: 1rem;
+            }
+
+            .col {
+                flex: 0 0 100%;
+                max-width: 100%;
+            }
+
+            .btn-group {
+                flex-direction: column;
+            }
+
+            .btn {
+                width: 100%;
+                justify-content: center;
+            }
+        }
+
+        @media (max-width: 576px) {
+            .container {
+                padding: 1rem;
+            }
+
+            .page-title {
                 font-size: 1.5rem;
             }
-            
-            .nav-menu {
-                gap: 1rem;
-            }
-            
-            .nav-item, .back-btn {
+
+            .card-header {
+                padding: 0.75rem 1rem;
                 font-size: 1rem;
-                padding: 0.625rem 1.25rem;
             }
-            
-            .container {
-                padding: 2rem;
+
+            .card-body {
+                padding: 1rem;
             }
-            
-            .submit-btn {
-                width: auto;
-                min-width: 200px;
+
+            .form-control {
+                padding: 0.5rem;
+            }
+
+            .toggle-btn {
+                padding: 0.5rem 1rem;
+                font-size: 0.9rem;
             }
         }
 
-        @media (min-width: 1024px) {
-            .header {
-                padding: 1.5rem 2rem;
-            }
-            
-            .logo-image {
-                width: 70px;
-                height: 70px;
-            }
-            
-            .logo-text {
-                font-size: 1.6rem;
-            }
-            
-            .form-grid {
-                grid-template-columns: repeat(3, 1fr);
-            }
-            
-            .events-grid {
-                grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
-            }
+        /* Animation */
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
         }
 
-        @media (min-width: 1200px) {
-            .logo-image {
-                width: 80px;
-                height: 80px;
-            }
-            
-            .logo-text {
-                font-size: 1.8rem;
-            }
-        }
-
-        /* Dark mode support */
-        @media (prefers-color-scheme: dark) {
-            :root {
-                --white: #1a1a1a;
-                --light-color: #2d2d2d;
-                --dark-color: #ffffff;
-                --gray-100: #2d2d2d;
-                --gray-200: #3d3d3d;
-                --gray-300: #4d4d4d;
-            }
-        }
-
-        /* Print styles */
-        @media print {
-            .header, .tab-navigation, .submit-btn {
-                display: none;
-            }
-            
-            body {
-                background: white;
-                color: black;
-            }
-            
-            .event-card {
-                break-inside: avoid;
-                box-shadow: none;
-                border: 1px solid #ccc;
-            }
-        }
-
-        /* High contrast mode */
-        @media (prefers-contrast: high) {
-            .nav-item, .tab-btn {
-                border: 1px solid;
-            }
-            
-            .event-card {
-                border: 2px solid var(--dark-color);
-            }
-        }
-
-        /* Reduced motion */
-        @media (prefers-reduced-motion: reduce) {
-            * {
-                animation-duration: 0.01ms !important;
-                animation-iteration-count: 1 !important;
-                transition-duration: 0.01ms !important;
-            }
-        }
-
-        /* Focus styles for accessibility */
-        .nav-item:focus,
-        .tab-btn:focus,
-        .submit-btn:focus,
-        input:focus,
-        select:focus,
-        textarea:focus {
-            outline: 2px solid var(--primary-color);
-            outline-offset: 2px;
-        }
-
-        /* Loading state */
-        .loading {
-            opacity: 0.6;
-            pointer-events: none;
-        }
-
-        .loading::after {
-            content: '';
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            width: 20px;
-            height: 20px;
-            margin: -10px 0 0 -10px;
-            border: 2px solid var(--primary-color);
-            border-top-color: transparent;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
+        .fade-in {
+            animation: fadeIn 0.5s ease-in-out;
         }
     </style>
 </head>
 <body>
     <!-- Header -->
     <header class="header">
-        <div class="header-content">
-            <div class="logo-container">
-                <img src="janalisu.jpg" alt="Janalisu Logo" class="logo-image">
-                <div class="logo-text">JANALISU EMPOWERMENT GROUP</div>
-            </div>
-            
-            <nav class="nav-menu">
-                <a href="admin_dashboard.php" class="nav-item">Dashboard</a>
-                <a href="students.php" class="nav-item">Students</a>
-                <a href="staffs.php" class="nav-item">Staff</a>
-                <a href="add_events.php" class="nav-item active">Events</a>
-            </nav>
-            
-            <a href="admin_dashboard.php" class="back-btn">← Back to Dashboard</a>
+        <div class="logo-container">
+            <img src="janalisu.jpg" alt="Janalisu Logo" class="logo-image">
+            <h1 class="logo-text">JANALISU EMPOWERMENT GROUP</h1>
         </div>
+        
+        <button class="mobile-menu-btn" id="mobileMenuBtn">
+            <i class="fas fa-bars"></i>
+        </button>
+        
+        <nav class="nav-menu" id="navMenu">
+            <a href="admin_dashboard.php" class="nav-item"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
+            <a href="students.php" class="nav-item"><i class="fas fa-users"></i> Students</a>
+            <a href="staffs.php" class="nav-item"><i class="fas fa-user-tie"></i> Staff</a>
+            <a href="add_events.php" class="nav-item active"><i class="fas fa-calendar-alt"></i> Events</a>
+            
+            <div class="user-section">
+                <div class="welcome-text">
+                    <div>Welcome,</div>
+                    <strong>Admin</strong>
+                </div>
+                <button class="btn btn-danger" onclick="logout()"><i class="fas fa-sign-out-alt"></i> Logout</button>
+            </div>
+        </nav>
     </header>
 
-    <div class="container">
-        <div class="page-header">
-            <h1 class="page-title">Events Management</h1>
-            <p class="page-subtitle">Organize and manage your events effectively</p>
+    <!-- Main Content -->
+    <main class="container">
+        <div class="page-header fade-in">
+            <h1 class="page-title">Event Management</h1>
+            <p class="page-subtitle">Manage your organization's events and activities</p>
         </div>
 
-        <?php if (!empty($message)): ?>
-            <div class="message <?php echo $message_type; ?>" role="alert">
-                <span><?php echo htmlspecialchars($message); ?></span>
+        <!-- Messages -->
+        <?php if ($message): ?>
+            <div class="alert alert-<?php echo $message_type === 'error' ? 'error' : 'success'; ?> fade-in">
+                <?php echo htmlspecialchars($message); ?>
             </div>
         <?php endif; ?>
 
-        <!-- Tab Navigation -->
-        <div class="tab-navigation">
-            <button class="tab-btn active" onclick="showTab('add-event')" aria-selected="true">Add New Event</button>
-            <button class="tab-btn" onclick="showTab('view-events')" aria-selected="false">View All Events</button>
-        </div>
+        <!-- Toggle Button -->
+        <button class="toggle-btn" id="toggleFormBtn">
+            <i class="fas fa-plus"></i>
+            <?php echo $edit_event ? 'Edit Event' : 'Add New Event'; ?>
+        </button>
 
-        <!-- Add Event Tab -->
-        <div id="add-event" class="tab-content active" role="tabpanel">
-            <div class="form-container">
-                <form method="POST" enctype="multipart/form-data" aria-label="Add new event form">
-                    <div class="form-grid">
-                        <div class="form-group">
-                            <label for="event_title">Event Title *</label>
-                            <input type="text" id="event_title" name="event_title" required aria-required="true">
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="event_type">Event Type</label>
-                            <select id="event_type" name="event_type">
-                                <option value="">Select Type</option>
-                                <option value="Workshop">Workshop</option>
-                                <option value="Training">Training</option>
-                                <option value="Seminar">Seminar</option>
-                                <option value="Conference">Conference</option>
-                                <option value="Meeting">Meeting</option>
-                                <option value="Community Event">Community Event</option>
-                                <option value="Fundraising">Fundraising</option>
-                                <option value="Sports">Sports</option>
-                                <option value="Other">Other</option>
-                            </select>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="event_date">Event Date *</label>
-                            <input type="date" id="event_date" name="event_date" required aria-required="true" min="<?php echo date('Y-m-d'); ?>">
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="event_time">Event Time *</label>
-                            <input type="time" id="event_time" name="event_time" required aria-required="true">
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="location">Location *</label>
-                            <input type="text" id="location" name="location" required aria-required="true" placeholder="Event venue">
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="max_participants">Max Participants</label>
-                            <input type="number" id="max_participants" name="max_participants" min="1" placeholder="Maximum number of participants">
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="status">Status</label>
-                            <select id="status" name="status">
-                                <option value="Scheduled">Scheduled</option>
-                                <option value="Ongoing">Ongoing</option>
-                                <option value="Completed">Completed</option>
-                                <option value="Cancelled">Cancelled</option>
-                            </select>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="event_image">Event Image</label>
-                            <div class="file-input-wrapper">
-                                <input type="file" id="event_image" name="event_image" accept="image/*" class="file-input">
+        <!-- Add/Edit Event Form -->
+        <div id="eventForm" class="card <?php echo !$edit_event ? 'hidden' : ''; ?> fade-in">
+            <div class="card-header">
+                <?php echo $edit_event ? 'Edit Event' : 'Add New Event'; ?>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="">
+                    <input type="hidden" name="action" value="<?php echo $edit_event ? 'edit' : 'add'; ?>">
+                    <?php if ($edit_event): ?>
+                        <input type="hidden" name="event_id" value="<?php echo $edit_event['event_id']; ?>">
+                    <?php endif; ?>
+                    
+                    <div class="row">
+                        <div class="col-12">
+                            <div class="form-group">
+                                <label class="form-label">Event Title *</label>
+                                <input type="text" name="title" class="form-control" required
+                                       value="<?php echo $edit_event ? htmlspecialchars($edit_event['title']) : ''; ?>">
                             </div>
-                        </div>
-                        
-                        <div class="form-group full-width">
-                            <label for="description">Event Description</label>
-                            <textarea id="description" name="description" placeholder="Describe the event details, objectives, and any other relevant information..."></textarea>
                         </div>
                     </div>
                     
-                    <button type="submit" name="add_event" class="submit-btn">Add Event</button>
+                    <div class="row">
+                        <div class="col-12">
+                            <div class="form-group">
+                                <label class="form-label">Description *</label>
+                                <textarea name="description" class="form-control" rows="4" required><?php echo $edit_event ? htmlspecialchars($edit_event['description']) : ''; ?></textarea>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col">
+                            <div class="form-group">
+                                <label class="form-label">Event Date *</label>
+                                <input type="date" name="event_date" class="form-control" required
+                                       value="<?php echo $edit_event ? $edit_event['event_date'] : ''; ?>">
+                            </div>
+                        </div>
+                        
+                        <div class="col">
+                            <div class="form-group">
+                                <label class="form-label">Start Time *</label>
+                                <input type="time" name="start_time" class="form-control" required
+                                       value="<?php echo $edit_event ? $edit_event['start_time'] : ''; ?>">
+                            </div>
+                        </div>
+                        
+                        <div class="col">
+                            <div class="form-group">
+                                <label class="form-label">End Time *</label>
+                                <input type="time" name="end_time" class="form-control" required
+                                       value="<?php echo $edit_event ? $edit_event['end_time'] : ''; ?>">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col">
+                            <div class="form-group">
+                                <label class="form-label">Location *</label>
+                                <input type="text" name="location" class="form-control" required
+                                       value="<?php echo $edit_event ? htmlspecialchars($edit_event['location']) : ''; ?>">
+                            </div>
+                        </div>
+                        
+                        <div class="col">
+                            <div class="form-group">
+                                <label class="form-label">Organizer *</label>
+                                <input type="text" name="organizer" class="form-control" required
+                                       value="<?php echo $edit_event ? htmlspecialchars($edit_event['organizer']) : ''; ?>">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col">
+                            <div class="form-group">
+                                <label class="form-label">Status</label>
+                                <select name="status" class="form-control form-select" required>
+                                    <option value="Upcoming" <?php echo ($edit_event && $edit_event['status'] == 'Upcoming') ? 'selected' : ''; ?>>Upcoming</option>
+                                    <option value="Ongoing" <?php echo ($edit_event && $edit_event['status'] == 'Ongoing') ? 'selected' : ''; ?>>Ongoing</option>
+                                    <option value="Completed" <?php echo ($edit_event && $edit_event['status'] == 'Completed') ? 'selected' : ''; ?>>Completed</option>
+                                    <option value="Cancelled" <?php echo ($edit_event && $edit_event['status'] == 'Cancelled') ? 'selected' : ''; ?>>Cancelled</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="btn-group">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save"></i> <?php echo $edit_event ? 'Update Event' : 'Add Event'; ?>
+                        </button>
+                        <button type="button" class="btn btn-secondary" onclick="cancelForm()">
+                            <i class="fas fa-times"></i> Cancel
+                        </button>
+                    </div>
                 </form>
             </div>
         </div>
 
-        <!-- View Events Tab -->
-        <div id="view-events" class="tab-content" role="tabpanel">
-            <div class="events-grid">
+        <!-- Events List -->
+        <div class="card fade-in">
+            <div class="card-header">
+                Upcoming Events (<?php echo count($events); ?> total)
+            </div>
+            
+            <div class="card-body">
                 <?php if (empty($events)): ?>
-                    <div class="empty-state">
-                        <h3>No events found</h3>
-                        <p>Start by adding your first event using the "Add New Event" tab.</p>
+                    <div class="text-center text-muted py-4">
+                        <i class="fas fa-calendar-alt fa-3x mb-3"></i>
+                        <h4>No events scheduled</h4>
+                        <p>Add your first event using the button above</p>
                     </div>
                 <?php else: ?>
-                    <?php foreach ($events as $event): ?>
-                        <article class="event-card">
-                            <?php if (!empty($event['image']) && file_exists($event['image'])): ?>
-                                <img src="<?php echo htmlspecialchars($event['image']); ?>" alt="<?php echo htmlspecialchars($event['event_title']); ?>" class="event-image">
-                            <?php else: ?>
-                                <div class="event-image">
-                                    📅
-                                </div>
-                            <?php endif; ?>
-                            
-                            <div class="event-content">
-                                <h3 class="event-title"><?php echo htmlspecialchars($event['event_title']); ?></h3>
-                                
-                                <div class="event-meta">
-                                    <span>📅 <?php echo date('M j, Y', strtotime($event['event_date'])); ?></span>
-                                    <span>⏰ <?php echo date('g:i A', strtotime($event['event_time'])); ?></span>
-                                    <span>📍 <?php echo htmlspecialchars($event['location']); ?></span>
-                                    <?php if (!empty($event['event_type'])): ?>
-                                        <span>🏷️ <?php echo htmlspecialchars($event['event_type']); ?></span>
-                                    <?php endif; ?>
-                                </div>
-                                
-                                <?php if (!empty($event['description'])): ?>
-                                    <p class="event-description">
-                                        <?php echo htmlspecialchars(substr($event['description'], 0, 120)); ?>
-                                        <?php if (strlen($event['description']) > 120) echo '...'; ?>
-                                    </p>
-                                <?php endif; ?>
-                                
-                                <div class="event-footer">
-                                    <span class="event-status status-<?php echo strtolower($event['status']); ?>">
-                                        <?php echo htmlspecialchars($event['status']); ?>
+                    <div class="event-cards">
+                        <?php foreach ($events as $event): 
+                            $status_class = '';
+                            switch($event['status']) {
+                                case 'Upcoming': $status_class = 'status-upcoming'; break;
+                                case 'Ongoing': $status_class = 'status-ongoing'; break;
+                                case 'Completed': $status_class = 'status-completed'; break;
+                                case 'Cancelled': $status_class = 'status-cancelled'; break;
+                            }
+                        ?>
+                            <div class="event-card">
+                                <div class="event-header">
+                                    <div class="event-date">
+                                        <?php echo date('M j', strtotime($event['event_date'])); ?>
+                                    </div>
+                                    <h3 class="event-title"><?php echo htmlspecialchars($event['title']); ?></h3>
+                                    <span class="event-status <?php echo $status_class; ?>">
+                                        <?php echo $event['status']; ?>
                                     </span>
+                                </div>
+                                <div class="event-body">
+                                    <div class="event-details">
+                                        <div class="event-detail">
+                                            <i class="fas fa-clock"></i>
+                                            <div>
+                                                <strong>Time:</strong> 
+                                                <?php echo date('g:i A', strtotime($event['start_time'])) . ' - ' . date('g:i A', strtotime($event['end_time'])); ?>
+                                            </div>
+                                        </div>
+                                        <div class="event-detail">
+                                            <i class="fas fa-map-marker-alt"></i>
+                                            <div><strong>Location:</strong> <?php echo htmlspecialchars($event['location']); ?></div>
+                                        </div>
+                                        <div class="event-detail">
+                                            <i class="fas fa-user-tie"></i>
+                                            <div><strong>Organizer:</strong> <?php echo htmlspecialchars($event['organizer']); ?></div>
+                                        </div>
+                                    </div>
                                     
-                                    <?php if (!empty($event['max_participants'])): ?>
-                                        <span class="participants-info">
-                                            Max: <?php echo $event['max_participants']; ?> participants
-                                        </span>
-                                    <?php endif; ?>
+                                    <p class="event-description">
+                                        <?php echo htmlspecialchars($event['description']); ?>
+                                    </p>
+                                    
+                                    <div class="d-flex gap-2">
+                                        <a href="?edit=<?php echo $event['event_id']; ?>" class="btn btn-success btn-sm">
+                                            <i class="fas fa-edit"></i> Edit
+                                        </a>
+                                        <form method="POST" onsubmit="return confirm('Are you sure you want to delete this event?');">
+                                            <input type="hidden" name="action" value="delete">
+                                            <input type="hidden" name="event_id" value="<?php echo $event['event_id']; ?>">
+                                            <button type="submit" class="btn btn-danger btn-sm">
+                                                <i class="fas fa-trash-alt"></i> Delete
+                                            </button>
+                                        </form>
+                                    </div>
                                 </div>
                             </div>
-                        </article>
-                    <?php endforeach; ?>
+                        <?php endforeach; ?>
+                    </div>
                 <?php endif; ?>
             </div>
         </div>
-    </div>
+    </main>
 
     <script>
-        // Enhanced tab switching with accessibility
-        function showTab(tabName) {
-            // Hide all tab contents
-            document.querySelectorAll('.tab-content').forEach(tab => {
-                tab.classList.remove('active');
-                tab.setAttribute('aria-hidden', 'true');
-            });
-            
-            // Remove active class from all tab buttons
-            document.querySelectorAll('.tab-btn').forEach(btn => {
-                btn.classList.remove('active');
-                btn.setAttribute('aria-selected', 'false');
-            });
-            
-            // Show selected tab content
-            const selectedTab = document.getElementById(tabName);
-            selectedTab.classList.add('active');
-            selectedTab.setAttribute('aria-hidden', 'false');
-            
-            // Add active class to clicked button
-            event.target.classList.add('active');
-            event.target.setAttribute('aria-selected', 'true');
-            
-            // Focus management for accessibility
-            selectedTab.focus();
-        }
-
-        // Enhanced file input with preview
-        document.getElementById('event_image').addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            const wrapper = this.closest('.file-input-wrapper');
-            
-            if (file) {
-                const fileName = file.name;
-                const fileSize = (file.size / 1024 / 1024).toFixed(2);
-                
-                // Update label text
-                const label = document.querySelector('label[for="event_image"]');
-                label.innerHTML = `Event Image - ${fileName} (${fileSize}MB)`;
-                
-                // Create preview if it's an image
-                if (file.type.startsWith('image/')) {
-                    const reader = new FileReader();
-                    reader.onload = function(e) {
-                        let preview = wrapper.querySelector('.image-preview');
-                        if (!preview) {
-                            preview = document.createElement('img');
-                            preview.className = 'image-preview';
-                            preview.style.cssText = `
-                                max-width: 200px;
-                                max-height: 150px;
-                                margin-top: 10px;
-                                border-radius: 8px;
-                                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-                            `;
-                            wrapper.appendChild(preview);
-                        }
-                        preview.src = e.target.result;
-                        preview.alt = 'Event image preview';
-                    };
-                    reader.readAsDataURL(file);
-                }
-            }
+        // Mobile menu toggle
+        document.getElementById('mobileMenuBtn').addEventListener('click', function() {
+            document.getElementById('navMenu').classList.toggle('show');
         });
 
-        // Enhanced form validation with better UX
-        document.querySelector('form').addEventListener('submit', function(e) {
-            const requiredFields = ['event_title', 'event_date', 'event_time', 'location'];
-            let isValid = true;
-            let firstInvalidField = null;
-            
-            // Clear previous validation states
-            document.querySelectorAll('.form-group').forEach(group => {
-                group.classList.remove('error');
-            });
-            
-            requiredFields.forEach(fieldName => {
-                const field = document.getElementById(fieldName);
-                const formGroup = field.closest('.form-group');
-                
-                if (!field.value.trim()) {
-                    formGroup.classList.add('error');
-                    field.style.borderColor = '#f44336';
-                    isValid = false;
-                    
-                    if (!firstInvalidField) {
-                        firstInvalidField = field;
-                    }
-                } else {
-                    field.style.borderColor = '';
-                }
-            });
-            
-            // Date validation
-            const eventDate = document.getElementById('event_date');
-            if (eventDate.value && eventDate.value < new Date().toISOString().split('T')[0]) {
-                eventDate.style.borderColor = '#f44336';
-                isValid = false;
-                if (!firstInvalidField) firstInvalidField = eventDate;
-            }
-            
-            // File size validation
-            const fileInput = document.getElementById('event_image');
-            if (fileInput.files[0] && fileInput.files[0].size > 5 * 1024 * 1024) { // 5MB limit
-                alert('Please select an image smaller than 5MB.');
-                isValid = false;
-                if (!firstInvalidField) firstInvalidField = fileInput;
-            }
-            
-            if (!isValid) {
-                e.preventDefault();
-                
-                // Show user-friendly error message
-                showNotification('Please fill in all required fields correctly.', 'error');
-                
-                // Focus first invalid field
-                if (firstInvalidField) {
-                    firstInvalidField.focus();
-                    firstInvalidField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // Toggle form visibility
+        const toggleFormBtn = document.getElementById('toggleFormBtn');
+        const eventForm = document.getElementById('eventForm');
+        
+        function toggleForm() {
+            eventForm.classList.toggle('hidden');
+            if (eventForm.classList.contains('hidden')) {
+                toggleFormBtn.innerHTML = '<i class="fas fa-plus"></i> Add New Event';
+                // Clear edit mode if form is hidden
+                if (window.location.search.includes('edit=')) {
+                    window.history.replaceState({}, document.title, window.location.pathname);
                 }
             } else {
-                // Show loading state
-                const submitBtn = this.querySelector('.submit-btn');
-                submitBtn.textContent = 'Adding Event...';
-                submitBtn.disabled = true;
-                this.classList.add('loading');
+                toggleFormBtn.innerHTML = '<i class="fas fa-times"></i> Cancel';
             }
-        });
+        }
+        
+        toggleFormBtn.addEventListener('click', toggleForm);
 
-        // Auto-hide success messages with better animation
-        function hideMessage() {
-            const messages = document.querySelectorAll('.message');
-            messages.forEach(message => {
+        // Cancel form
+        function cancelForm() {
+            eventForm.classList.add('hidden');
+            toggleFormBtn.innerHTML = '<i class="fas fa-plus"></i> Add New Event';
+            // Clear edit mode
+            if (window.location.search.includes('edit=')) {
+                window.history.replaceState({}, document.title, window.location.pathname);
+            }
+        }
+
+        // Logout function
+        function logout() {
+            if (confirm('Are you sure you want to logout?')) {
+                window.location.href = 'index.php';
+            }
+        }
+
+        // Auto-hide messages after 5 seconds
+        const messages = document.querySelectorAll('.alert');
+        messages.forEach(message => {
+            setTimeout(() => {
+                message.style.opacity = '0';
                 setTimeout(() => {
-                    message.style.opacity = '0';
-                    message.style.transform = 'translateY(-10px)';
-                    message.style.transition = 'all 0.3s ease';
-                    setTimeout(() => {
-                        message.style.display = 'none';
-                    }, 300);
-                }, 5000);
+                    message.remove();
+                }, 300);
+            }, 5000);
+        });
+
+        // If in edit mode, ensure form is visible
+        <?php if ($edit_event): ?>
+            document.addEventListener('DOMContentLoaded', function() {
+                eventForm.classList.remove('hidden');
+                toggleFormBtn.innerHTML = '<i class="fas fa-times"></i> Cancel';
             });
-        }
-
-        // Enhanced notification system
-        function showNotification(message, type = 'info') {
-            const notification = document.createElement('div');
-            notification.className = `message ${type}`;
-            notification.innerHTML = `<span>${message}</span>`;
-            notification.style.cssText = `
-                position: fixed;
-                top: 20px;
-                right: 20px;
-                z-index: 10000;
-                max-width: 400px;
-                animation: slideIn 0.3s ease;
-            `;
-            
-            document.body.appendChild(notification);
-            
-            setTimeout(() => {
-                notification.style.opacity = '0';
-                notification.style.transform = 'translateX(100%)';
-                setTimeout(() => notification.remove(), 300);
-            }, 4000);
-        }
-
-        // Keyboard navigation for tabs
-        document.addEventListener('keydown', function(e) {
-            if (e.target.classList.contains('tab-btn')) {
-                const tabs = Array.from(document.querySelectorAll('.tab-btn'));
-                const currentIndex = tabs.indexOf(e.target);
-                
-                if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-                    e.preventDefault();
-                    const nextIndex = e.key === 'ArrowLeft' 
-                        ? (currentIndex - 1 + tabs.length) % tabs.length
-                        : (currentIndex + 1) % tabs.length;
-                    
-                    tabs[nextIndex].focus();
-                } else if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    e.target.click();
-                }
-            }
-        });
-
-        // Enhanced page load animation
-        document.addEventListener('DOMContentLoaded', function() {
-            // Animate page entrance
-            document.body.style.opacity = '0';
-            document.body.style.transform = 'translateY(20px)';
-            document.body.style.transition = 'all 0.6s cubic-bezier(0.4, 0, 0.2, 1)';
-            
-            setTimeout(() => {
-                document.body.style.opacity = '1';
-                document.body.style.transform = 'translateY(0)';
-            }, 100);
-            
-            // Animate cards on scroll
-            const observerOptions = {
-                threshold: 0.1,
-                rootMargin: '0px 0px -50px 0px'
-            };
-            
-            const observer = new IntersectionObserver((entries) => {
-                entries.forEach(entry => {
-                    if (entry.isIntersecting) {
-                        entry.target.style.opacity = '1';
-                        entry.target.style.transform = 'translateY(0)';
-                    }
-                });
-            }, observerOptions);
-            
-            // Observe event cards for scroll animation
-            setTimeout(() => {
-                document.querySelectorAll('.event-card').forEach((card, index) => {
-                    card.style.opacity = '0';
-                    card.style.transform = 'translateY(30px)';
-                    card.style.transition = `all 0.6s cubic-bezier(0.4, 0, 0.2, 1) ${index * 0.1}s`;
-                    observer.observe(card);
-                });
-            }, 200);
-            
-            // Initialize message auto-hide
-            hideMessage();
-            
-            // Initialize tooltips for truncated text
-            initializeTooltips();
-        });
-
-        // Tooltip functionality for truncated descriptions
-        function initializeTooltips() {
-            document.querySelectorAll('.event-description').forEach(desc => {
-                const fullText = desc.textContent;
-                if (fullText.endsWith('...')) {
-                    desc.style.cursor = 'pointer';
-                    desc.title = 'Click to see full description';
-                    
-                    desc.addEventListener('click', function() {
-                        // Toggle between truncated and full text
-                        if (this.dataset.expanded === 'true') {
-                            this.textContent = fullText.substring(0, 120) + '...';
-                            this.dataset.expanded = 'false';
-                        } else {
-                            // Get full description from PHP data
-                            const eventCard = this.closest('.event-card');
-                            const eventTitle = eventCard.querySelector('.event-title').textContent;
-                            // This would need to be enhanced to get full description from data
-                            this.textContent = fullText; // Simplified for demo
-                            this.dataset.expanded = 'true';
-                        }
-                    });
-                }
-            });
-        }
-
-        // Service Worker registration for offline capability (optional)
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js')
-                    .then(registration => console.log('SW registered'))
-                    .catch(error => console.log('SW registration failed'));
-            });
-        }
-
-        // Error handling for images
-        document.addEventListener('error', function(e) {
-            if (e.target.tagName === 'IMG' && e.target.classList.contains('event-image')) {
-                e.target.style.display = 'none';
-                const placeholder = document.createElement('div');
-                placeholder.className = 'event-image';
-                placeholder.innerHTML = '📅';
-                e.target.parentNode.insertBefore(placeholder, e.target);
-            }
-        }, true);
-
-        // Auto-save form data to prevent data loss (using sessionStorage)
-        const form = document.querySelector('form');
-        const formFields = form.querySelectorAll('input:not([type="file"]), select, textarea');
-        
-        // Load saved data
-        formFields.forEach(field => {
-            const savedValue = sessionStorage.getItem(`form_${field.name}`);
-            if (savedValue && !field.value) {
-                field.value = savedValue;
-            }
-        });
-        
-        // Save data on input
-        formFields.forEach(field => {
-            field.addEventListener('input', function() {
-                sessionStorage.setItem(`form_${this.name}`, this.value);
-            });
-        });
-        
-        // Clear saved data on successful submission
-        form.addEventListener('submit', function() {
-            if (this.checkValidity()) {
-                formFields.forEach(field => {
-                    sessionStorage.removeItem(`form_${field.name}`);
-                });
-            }
-        });
+        <?php endif; ?>
     </script>
-    
-    <!-- Add CSS animations -->
-    <style>
-        @keyframes slideIn {
-            from {
-                opacity: 0;
-                transform: translateX(100%);
-            }
-            to {
-                opacity: 1;
-                transform: translateX(0);
-            }
-        }
-        
-        .form-group.error label {
-            color: var(--error-color);
-        }
-        
-        .form-group.error input,
-        .form-group.error select,
-        .form-group.error textarea {
-            border-color: var(--error-color);
-            box-shadow: 0 0 0 3px rgba(244, 67, 54, 0.1);
-        }
-        
-        .image-preview {
-            display: block;
-            margin-top: 0.5rem;
-        }
-        
-        /* Loading spinner */
-        .loading .submit-btn::after {
-            content: '';
-            width: 16px;
-            height: 16px;
-            margin-left: 8px;
-            border: 2px solid transparent;
-            border-top-color: currentColor;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            display: inline-block;
-        }
-    </style>
 </body>
 </html>

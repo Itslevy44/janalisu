@@ -599,7 +599,7 @@
                             <div class="contact-item">
                                 <div class="contact-icon">📞</div>
                                 <div class="contact-text">
-                                    <strong>Call us:</strong> +254 712 345 678<br>
+                                    <strong>Call us:</strong> +254 723 695 920<br>
                                     <small>Available Mon-Fri, 8:00 AM - 6:00 PM</small>
                                 </div>
                             </div>
@@ -607,7 +607,7 @@
                             <div class="contact-item">
                                 <div class="contact-icon">📧</div>
                                 <div class="contact-text">
-                                    <strong>Email:</strong> volunteer@janalisu.org<br>
+                                    <strong>Email:</strong> janalisuempowerment@gmail.com<br>
                                     <small>We'll respond within 24 hours</small>
                                 </div>
                             </div>

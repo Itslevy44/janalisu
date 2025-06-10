@@ -1,81 +1,82 @@
 <?php
-require_once 'config.php'; // Handles DB connection and session
+require_once 'config.php';
 
-// Filter parameters
-$event_type_filter = isset($_GET['type']) ? $_GET['type'] : '';
-$status_filter = isset($_GET['status']) ? $_GET['status'] : '';
-$search_query = isset($_GET['search']) ? trim($_GET['search']) : '';
-
-// Build the SQL query with filters
-$sql = "SELECT * FROM events WHERE 1=1";
-$params = [];
-
-if (!empty($event_type_filter)) {
-    $sql .= " AND event_type = ?";
-    $params[] = $event_type_filter;
-}
-
-if (!empty($status_filter)) {
-    $sql .= " AND status = ?";
-    $params[] = $status_filter;
-}
-
-if (!empty($search_query)) {
-    $sql .= " AND (event_title LIKE ? OR description LIKE ? OR location LIKE ?)";
-    $search_param = "%$search_query%";
-    $params[] = $search_param;
-    $params[] = $search_param;
-    $params[] = $search_param;
-}
-
-$sql .= " ORDER BY event_date ASC, event_time ASC";
-
-// Fetch filtered events
+// Fetch all events from the database
 try {
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute($params);
+    $stmt = $pdo->prepare("SELECT * FROM events ORDER BY event_date ASC, start_time ASC");
+    $stmt->execute();
     $events = $stmt->fetchAll(PDO::FETCH_ASSOC);
-} catch(PDOException $e) {
+} catch (PDOException $e) {
+    echo "Error fetching events: " . $e->getMessage();
     $events = [];
-    $error_message = "Error fetching events: " . $e->getMessage();
 }
 
-// Get unique event types for dropdown
-try {
-    $type_stmt = $pdo->query("SELECT DISTINCT event_type FROM events WHERE event_type IS NOT NULL AND event_type != '' ORDER BY event_type");
-    $event_types = $type_stmt->fetchAll(PDO::FETCH_COLUMN);
-} catch(PDOException $e) {
-    $event_types = [];
+// Filter events based on search and filters if provided
+$search = isset($_GET['search']) ? trim($_GET['search']) : '';
+$event_type = isset($_GET['event_type']) ? $_GET['event_type'] : 'all';
+$status_filter = isset($_GET['status']) ? $_GET['status'] : 'all';
+
+if (!empty($search) || $event_type !== 'all' || $status_filter !== 'all') {
+    $filtered_events = [];
+    foreach ($events as $event) {
+        $match = true;
+        
+        // Search filter
+        if (!empty($search)) {
+            $search_text = strtolower($search);
+            if (strpos(strtolower($event['title']), $search_text) === false &&
+                strpos(strtolower($event['description']), $search_text) === false &&
+                strpos(strtolower($event['location']), $search_text) === false) {
+                $match = false;
+            }
+        }
+        
+        // Status filter
+        if ($status_filter !== 'all' && strtolower($event['status']) !== strtolower($status_filter)) {
+            $match = false;
+        }
+        
+        if ($match) {
+            $filtered_events[] = $event;
+        }
+    }
+    $events = $filtered_events;
 }
 
-// Group events by status
-$upcoming_events = [];
-$ongoing_events = [];
-$completed_events = [];
+// Function to format date
+function formatDate($date) {
+    return date('M d, Y', strtotime($date));
+}
 
-foreach ($events as $event) {
-    $event_date = strtotime($event['event_date']);
-    $today = strtotime(date('Y-m-d'));
+// Function to format time
+function formatTime($time) {
+    return date('g:i A', strtotime($time));
+}
 
-    if ($event['status'] === 'Ongoing') {
-        $ongoing_events[] = $event;
-    } elseif ($event['status'] === 'Completed' || $event_date < $today) {
-        $completed_events[] = $event;
-    } else {
-        $upcoming_events[] = $event;
+// Function to get status badge class
+function getStatusBadge($status) {
+    switch (strtolower($status)) {
+        case 'scheduled':
+            return 'status-scheduled';
+        case 'ongoing':
+            return 'status-ongoing';
+        case 'completed':
+            return 'status-completed';
+        case 'cancelled':
+            return 'status-cancelled';
+        default:
+            return 'status-scheduled';
     }
 }
 ?>
-
 
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>JANALISU - Upcoming Events</title>
+    <title>Upcoming Events - JANALISU EMPOWERMENT GROUP</title>
     <style>
-        
         * {
             margin: 0;
             padding: 0;
@@ -83,103 +84,58 @@ foreach ($events as $event) {
         }
 
         body {
-            font-family: 'Arial', sans-serif;
-            line-height: 1.6;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f8f9fa;
             color: #333;
-            overflow-x: hidden;
-            background: #f8fafc;
         }
 
-        /* Header and Navigation */
-        header {
-            position: fixed;
-            top: 0;
-            width: 100%;
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(15px);
-            z-index: 1000;
+        .header {
+            background: linear-gradient(135deg, #e91e63 0%, #9c27b0 25%, #673ab7 50%, #3f51b5 75%, #00bcd4 100%);
+            padding: 2rem 0;
+            text-align: center;
+            color: white;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        .nav {
+            background: white;
             padding: 1rem 0;
-            box-shadow: 0 4px 30px rgba(236, 72, 153, 0.1);
-            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 2rem;
         }
 
-        nav {
+        .nav-content {
             display: flex;
             justify-content: space-between;
             align-items: center;
             max-width: 1200px;
             margin: 0 auto;
-            padding: 0 2rem;
+            padding: 0 20px;
         }
 
-        .logo-container {
+        .nav-links {
             display: flex;
-            align-items: center;
-            gap: 15px;
-        }
-
-        .logo-image {
-            width: 80px;
-            height: 80px;
-            border-radius: 50%;
-            object-fit: cover;
-            border: 3px solid transparent;
-            background: linear-gradient(white, white) padding-box,
-                        linear-gradient(135deg, #ec4899 0%, #8b5cf6 50%, #06b6d4 100%) border-box;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
-        }
-
-        .logo-image:hover {
-            transform: scale(1.05);
-            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
-        }
-
-        .logo-text {
-            font-size: 1.8rem;
-            font-weight: bold;
-            background: linear-gradient(135deg, #ec4899 0%, #8b5cf6 50%, #06b6d4 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            margin: 0;
-        }
-
-        .nav-menu {
-            display: flex;
-            list-style: none;
             gap: 2rem;
+            list-style: none;
         }
 
-        .nav-menu a {
+        .nav-links a {
             text-decoration: none;
-            color: #333;
+            color: #666;
             font-weight: 500;
-            transition: all 0.3s ease;
-            position: relative;
+            transition: color 0.3s;
         }
 
-        .nav-menu a:hover {
-            color: #ec4899;
-            transform: translateY(-2px);
+        .nav-links a:hover, .nav-links a.active {
+            color: #e91e63;
         }
 
-        .nav-menu a::after {
-            content: '';
-            position: absolute;
-            width: 0;
-            height: 3px;
-            bottom: -5px;
-            left: 0;
-            background: linear-gradient(135deg, #ec4899 0%, #8b5cf6 100%);
-            transition: width 0.3s ease;
-            border-radius: 2px;
-        }
-
-        .nav-menu a:hover::after {
-            width: 100%;
-        }
-
+        /* Mobile menu styles */
         .mobile-menu {
             display: none;
             flex-direction: column;
@@ -195,381 +151,236 @@ foreach ($events as $event) {
             border-radius: 2px;
         }
 
-        /* Hero Section for Events Page */
-        .hero-section {
-            padding: 140px 2rem 80px;
-            background: linear-gradient(135deg, rgba(236, 72, 153, 0.9) 0%, rgba(139, 92, 246, 0.8) 50%, rgba(6, 182, 212, 0.9) 100%);
+        .hero {
             text-align: center;
-            color: white;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .hero-section::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grid" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M 10 0 L 0 0 0 10" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="0.5"/></pattern></defs><rect width="100" height="100" fill="url(%23grid)"/></svg>');
-            opacity: 0.3;
-        }
-
-        .hero-title {
-            font-size: 4rem;
-            font-weight: 800;
-            margin-bottom: 1rem;
-            text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.3);
-            background: linear-gradient(45deg, #fff 0%, #f8fafc 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            position: relative;
-            z-index: 2;
-        }
-
-        .hero-subtitle {
-            font-size: 1.3rem;
-            opacity: 0.95;
-            max-width: 700px;
-            margin: 0 auto;
-            text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.2);
-            position: relative;
-            z-index: 2;
-        }
-
-        /* Filter Section */
-        .filter-section {
-            background: white;
-            padding: 3rem 2rem;
-            box-shadow: 0 4px 25px rgba(0, 0, 0, 0.1);
             margin-bottom: 3rem;
         }
 
-        .filter-grid {
-            display: grid;
-            grid-template-columns: 2fr 1fr 1fr auto;
-            gap: 2rem;
-            max-width: 1200px;
+        .hero h1 {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            background: linear-gradient(135deg, #fff 0%, #f0f0f0 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .hero p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+            max-width: 600px;
             margin: 0 auto;
-            align-items: end;
+            line-height: 1.6;
         }
 
-        .filter-group {
-            display: flex;
-            flex-direction: column;
-            gap: 0.5rem;
-        }
-
-        .filter-label {
-            font-weight: 600;
-            color: #374151;
-            font-size: 0.9rem;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        .filter-input,
-        .filter-select {
-            padding: 0.875rem 1rem;
-            border: 2px solid #e5e7eb;
-            border-radius: 12px;
-            font-size: 1rem;
-            transition: all 0.3s ease;
+        .filters {
             background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 2rem;
         }
 
-        .filter-input:focus,
-        .filter-select:focus {
+        .filters h3 {
+            margin-bottom: 1rem;
+            color: #333;
+            font-size: 1.2rem;
+        }
+
+        .filter-row {
+            display: grid;
+            grid-template-columns: 1fr 200px 200px;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .search-input, .filter-select {
+            padding: 12px 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.3s;
+        }
+
+        .search-input:focus, .filter-select:focus {
             outline: none;
-            border-color: #ec4899;
-            box-shadow: 0 0 0 3px rgba(236, 72, 153, 0.1);
+            border-color: #e91e63;
         }
 
         .filter-btn {
-            padding: 0.875rem 2rem;
-            background: linear-gradient(135deg, #ec4899 0%, #8b5cf6 100%);
+            background: linear-gradient(135deg, #e91e63, #9c27b0);
             color: white;
             border: none;
-            border-radius: 12px;
-            font-weight: 600;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 1rem;
             cursor: pointer;
-            transition: all 0.3s ease;
-            box-shadow: 0 4px 15px rgba(236, 72, 153, 0.3);
+            transition: transform 0.2s;
         }
 
         .filter-btn:hover {
             transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(236, 72, 153, 0.4);
         }
 
-        /* Container */
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 0 2rem;
-        }
-
-        /* Section Headers */
-        .section-header {
-            text-align: center;
+        .events-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 2rem;
             margin-bottom: 3rem;
         }
 
-        .section-title {
-            font-size: 2.5rem;
-            font-weight: 800;
-            background: linear-gradient(135deg, #ec4899 0%, #8b5cf6 50%, #06b6d4 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            margin-bottom: 1rem;
-        }
-
-        .section-subtitle {
-            font-size: 1.1rem;
-            color: #6b7280;
-            max-width: 600px;
-            margin: 0 auto;
-        }
-
-        /* Events Grid */
-        .events-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
-            gap: 2rem;
-            margin-bottom: 4rem;
-        }
-
-        /* Event Cards */
         .event-card {
             background: white;
-            border-radius: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
             overflow: hidden;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
-            transition: all 0.4s ease;
-            position: relative;
-            transform: translateY(20px);
-            opacity: 0;
+            transition: transform 0.3s, box-shadow 0.3s;
         }
 
         .event-card:hover {
-            transform: translateY(-8px);
-            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
         }
 
-        .event-image {
-            width: 100%;
-            height: 200px;
-            object-fit: cover;
-            background: linear-gradient(135deg, #ec4899 0%, #8b5cf6 50%, #06b6d4 100%);
-        }
-
-        .event-content {
+        .event-header {
+            background: linear-gradient(135deg, #e91e63 0%, #9c27b0 25%, #673ab7 50%, #3f51b5 75%, #00bcd4 100%);
             padding: 1.5rem;
+            color: white;
         }
 
         .event-title {
-            font-size: 1.4rem;
-            font-weight: 700;
-            color: #1f2937;
-            margin-bottom: 1rem;
-            line-height: 1.3;
+            font-size: 1.3rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
         }
 
-        .event-meta {
-            display: flex;
-            flex-direction: column;
-            gap: 0.5rem;
-            margin-bottom: 1rem;
-        }
-
-        .event-meta-item {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            font-size: 0.9rem;
-            color: #6b7280;
-        }
-
-        .event-meta-icon {
+        .event-date {
             font-size: 1rem;
+            opacity: 0.9;
+        }
+
+        .event-body {
+            padding: 1.5rem;
         }
 
         .event-description {
-            color: #6b7280;
+            color: #666;
             line-height: 1.6;
-            margin-bottom: 1.5rem;
+            margin-bottom: 1rem;
         }
 
-        .event-footer {
+        .event-details {
+            display: grid;
+            gap: 0.5rem;
+        }
+
+        .event-detail {
             display: flex;
-            justify-content: space-between;
             align-items: center;
-            flex-wrap: wrap;
-            gap: 1rem;
+            gap: 0.5rem;
+            color: #555;
+            font-size: 0.9rem;
         }
 
-        /* Event Status */
-        .event-status {
-            padding: 0.4rem 1rem;
+        .event-detail-icon {
+            width: 16px;
+            height: 16px;
+            opacity: 0.7;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
             border-radius: 20px;
             font-size: 0.8rem;
-            font-weight: 600;
+            font-weight: bold;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
         }
 
         .status-scheduled {
-            background: rgba(59, 130, 246, 0.1);
-            color: #3b82f6;
+            background: #e3f2fd;
+            color: #1976d2;
         }
 
         .status-ongoing {
-            background: rgba(16, 185, 129, 0.1);
-            color: #10b981;
+            background: #e8f5e8;
+            color: #388e3c;
         }
 
         .status-completed {
-            background: rgba(107, 114, 128, 0.1);
-            color: #6b7280;
+            background: #f3e5f5;
+            color: #7b1fa2;
         }
 
-        .participants-info {
-            font-size: 0.85rem;
-            color: #6b7280;
-            font-weight: 500;
+        .status-cancelled {
+            background: #ffebee;
+            color: #d32f2f;
         }
 
-        /* Badges */
-        .new-badge,
-        .urgent-badge {
-            position: absolute;
-            top: 1rem;
-            right: 1rem;
-            padding: 0.4rem 0.8rem;
-            border-radius: 20px;
-            font-size: 0.8rem;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            z-index: 10;
-        }
-
-        .new-badge {
-            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-            color: white;
-        }
-
-        .urgent-badge {
-            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-            color: white;
-            animation: pulse 2s infinite;
-        }
-
-        @keyframes pulse {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.05); }
-        }
-
-        /* Empty State */
-        .empty-state {
+        .no-events {
             text-align: center;
-            padding: 4rem 2rem;
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            padding: 3rem;
+            color: #666;
         }
 
-        .empty-state-icon {
-            font-size: 4rem;
+        .no-events h3 {
             margin-bottom: 1rem;
+            color: #333;
         }
 
-        .empty-state-title {
-            font-size: 1.8rem;
-            font-weight: 700;
-            color: #374151;
-            margin-bottom: 1rem;
+        .logo-container {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
         }
 
-        .empty-state-subtitle {
-            color: #6b7280;
-            font-size: 1.1rem;
+        .logo-image {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid transparent;
+            background: linear-gradient(white, white) padding-box,
+                        linear-gradient(135deg, #ec4899 0%, #8b5cf6 50%, #06b6d4 100%) border-box;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
         }
 
-        /* Footer */
-        footer {
-            background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
-            color: white;
-            padding: 4rem 2rem 1rem;
-            position: relative;
-            margin-top: 6rem;
+        .logo-image:hover {
+            transform: scale(1.05);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
         }
 
-        footer::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 4px;
+        .logo-text {
+            font-size: 1.2rem;
+            font-weight: bold;
             background: linear-gradient(135deg, #ec4899 0%, #8b5cf6 50%, #06b6d4 100%);
-        }
-
-        .footer-content {
-            max-width: 1200px;
-            margin: 0 auto;
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 3rem;
-        }
-
-        .footer-section h3 {
-            background: linear-gradient(135deg, #ec4899 0%, #06b6d4 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
-            margin-bottom: 1.5rem;
-            font-size: 1.4rem;
-            font-weight: 700;
-        }
-
-        .footer-section p, .footer-section a {
-            color: #cbd5e1;
-            text-decoration: none;
-            margin-bottom: 0.8rem;
-            display: block;
-            transition: color 0.3s ease;
-        }
-
-        .footer-section a:hover {
-            color: #ec4899;
-        }
-
-        .footer-bottom {
-            text-align: center;
-            margin-top: 3rem;
-            padding-top: 2rem;
-            border-top: 1px solid #475569;
-            color: #94a3b8;
-        }
-
-        /* Responsive Design */
-        @media (max-width: 1024px) {
-            .filter-grid {
-                grid-template-columns: 1fr 1fr;
-                gap: 1.5rem;
-            }
-            
-            .filter-grid .filter-group:first-child {
-                grid-column: 1 / -1;
-            }
+            margin: 0;
         }
 
         @media (max-width: 768px) {
-            .nav-menu {
+            .filter-row {
+                grid-template-columns: 1fr;
+            }
+            
+            .events-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .hero h1 {
+                font-size: 2rem;
+            }
+            
+            .nav-content {
+                flex-direction: row;
+                gap: 1rem;
+            }
+            
+            .nav-links {
                 position: fixed;
                 left: -100%;
                 top: 70px;
@@ -581,9 +392,11 @@ foreach ($events as $event) {
                 transition: 0.3s;
                 box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
                 padding: 2rem 0;
+                z-index: 1001;
+                gap: 1rem;
             }
 
-            .nav-menu.active {
+            .nav-links.active {
                 left: 0;
             }
 
@@ -591,274 +404,50 @@ foreach ($events as $event) {
                 display: flex;
             }
 
-            .hero-title {
-                font-size: 2.5rem;
-            }
-
-            .hero-subtitle {
-                font-size: 1.1rem;
-            }
-
-            .filter-grid {
-                grid-template-columns: 1fr;
-                gap: 1rem;
-            }
-
-            .events-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .section-title {
-                font-size: 2rem;
-            }
-
-            .logo-text {
-                font-size: 1.4rem;
+            .logo-container {
+                gap: 0.5rem;
             }
 
             .logo-image {
-                width: 60px;
-                height: 60px;
+                width: 40px;
+                height: 40px;
             }
 
-            .event-footer {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 0.5rem;
+            .logo-text {
+                font-size: 1rem;
             }
         }
 
         @media (max-width: 480px) {
-            .container {
-                padding: 0 1rem;
-            }
-
-            .filter-section {
-                padding: 2rem 1rem;
-            }
-
-            .hero-section {
-                padding: 120px 1rem 60px;
-            }
-
-            .events-grid {
-                grid-template-columns: 1fr;
-                gap: 1.5rem;
-            }
-
-            .event-card {
-                margin: 0;
-            }
-        }
-
-        /* Animation Classes */
-        .fade-in {
-            animation: fadeInUp 0.8s ease forwards;
-        }
-
-        @keyframes fadeInUp {
-            from {
-                opacity: 0;
-                transform: translateY(30px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        /* Loading States */
-        .filter-btn:disabled {
-            opacity: 0.7;
-            cursor: not-allowed;
-            transform: none !important;
-        }
-
-        /* Utility Classes */
-        .text-center { text-align: center; }
-        .mb-2 { margin-bottom: 0.5rem; }
-        .mb-4 { margin-bottom: 1rem; }
-        .mt-4 { margin-top: 1rem; }
-        .p-4 { padding: 1rem; }
-
-        /* Print Styles */
-        @media print {
-            header, .filter-section, footer {
-                display: none;
+            .logo-image {
+                width: 35px;
+                height: 35px;
             }
             
-            .event-card {
-                break-inside: avoid;
-                box-shadow: none;
-                border: 1px solid #ddd;
+            .logo-text {
+                font-size: 0.9rem;
+            }
+            
+            .hero h1 {
+                font-size: 1.8rem;
+            }
+            
+            .filters {
+                padding: 1rem;
             }
         }
-
-        /* Tablet responsiveness */
-@media (max-width: 1024px) {
-    nav {
-        padding: 0 1rem;
-    }
-    .container {
-        max-width: 98vw;
-        padding: 0 1rem;
-    }
-    .filter-grid {
-        grid-template-columns: 1fr 1fr;
-        gap: 1.5rem;
-    }
-    .filter-grid .filter-group:first-child {
-        grid-column: 1 / -1;
-    }
-    .events-grid {
-        grid-template-columns: 1fr 1fr;
-        gap: 1.5rem;
-    }
-    .footer-content {
-        grid-template-columns: 1fr 1fr;
-        gap: 2rem;
-    }
-    .logo-image {
-        width: 60px;
-        height: 60px;
-    }
-    .logo-text {
-        font-size: 1.4rem;
-    }
-}
-
-/* Mobile responsiveness */
-@media (max-width: 768px) {
-    nav {
-        flex-direction: column;
-        align-items: flex-start;
-        padding: 0 0.5rem;
-    }
-    .logo-container {
-        margin-bottom: 1rem;
-    }
-    .nav-menu {
-        position: fixed;
-        left: -100%;
-        top: 70px;
-        flex-direction: column;
-        background-color: rgba(255, 255, 255, 0.98);
-        backdrop-filter: blur(20px);
-        width: 100%;
-        text-align: center;
-        transition: 0.3s;
-        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
-        padding: 2rem 0;
-        z-index: 1001;
-    }
-    .nav-menu.active {
-        left: 0;
-    }
-    .mobile-menu {
-        display: flex;
-        margin-left: auto;
-    }
-    .hero-section {
-        padding: 100px 1rem 50px;
-    }
-    .hero-title {
-        font-size: 2.2rem;
-    }
-    .hero-subtitle {
-        font-size: 1rem;
-    }
-    .filter-section {
-        padding: 2rem 1rem;
-    }
-    .filter-grid {
-        grid-template-columns: 1fr;
-        gap: 1rem;
-    }
-    .events-grid {
-        grid-template-columns: 1fr;
-        gap: 1.2rem;
-    }
-    .section-title {
-        font-size: 1.5rem;
-    }
-    .footer-content {
-        grid-template-columns: 1fr;
-        gap: 1.2rem;
-    }
-    .logo-image {
-        width: 48px;
-        height: 48px;
-    }
-    .logo-text {
-        font-size: 1.1rem;
-    }
-    .event-card {
-        margin: 0;
-    }
-    .event-image {
-        height: 140px;
-    }
-    .event-title {
-        font-size: 1.1rem;
-    }
-    .event-meta {
-        font-size: 0.95rem;
-    }
-    .event-footer {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 0.5rem;
-    }
-}
-
-/* Small mobile devices */
-@media (max-width: 480px) {
-    .container {
-        padding: 0 0.5rem;
-    }
-    .hero-section {
-        padding: 70px 0.5rem 30px;
-    }
-    .hero-title {
-        font-size: 1.2rem;
-    }
-    .hero-subtitle {
-        font-size: 0.95rem;
-    }
-    .section-title {
-        font-size: 1.1rem;
-    }
-    .event-title {
-        font-size: 1rem;
-    }
-    .event-meta {
-        font-size: 0.9rem;
-    }
-    .event-image {
-        height: 90px;
-    }
-    .footer-content {
-        padding: 0 0.5rem;
-    }
-    .footer-section h3 {
-        font-size: 1.1rem;
-    }
-}
-
     </style>
 </head>
 <body>
-   <!-- Header -->
-    <header>
-        <nav>
+    <nav class="nav">
+        <div class="nav-content">
             <div class="logo-container">
-        <img src="janalisu.jpg" alt="Janalisu Logo" class="logo-image">
-        <div class="logo-text">JANALISU EMPOWERMENT GROUP</div>
-    </div>
-
-            <ul class="nav-menu">
+                <img src="janalisu.jpg" alt="Janalisu Logo" class="logo-image">
+                <div class="logo-text">JANALISU EMPOWERMENT GROUP</div>
+            </div>
+            <ul class="nav-links">
                 <li><a href="index.php">Home</a></li>
-                <li><a href="events.php">Events</a></li>
+                <li><a href="events.php" class="active">Events</a></li>
                 <li><a href="donate.php">Donate</a></li>
                 <li><a href="login.php">Login</a></li>
             </ul>
@@ -867,660 +456,128 @@ foreach ($events as $event) {
                 <span class="bar"></span>
                 <span class="bar"></span>
             </div>
-        </nav>
-    </header>
-<br><br><br>
-    <!-- Hero Section -->
-    <section class="hero-section">
-        <h1 class="hero-title">Upcoming Events</h1>
-        <p class="hero-subtitle">
-            Join us in making a difference in our community. Discover upcoming workshops, 
-            seminars, and empowerment programs designed to uplift and inspire.
-        </p>
-    </section>
+        </div>
+    </nav>
 
-    <!-- Filter Section -->
-    <div class="filter-section">
-        <form method="GET" class="filter-grid">
-            <div class="filter-group">
-                <label class="filter-label">Search Events</label>
-                <input type="text" name="search" class="filter-input" placeholder="Search by title, description, or location..." value="<?php echo htmlspecialchars($search_query); ?>">
+    <div class="header">
+        <div class="container">
+            <div class="hero">
+                <h1>Upcoming Events</h1>
+                <p>Join us in making a difference in our community. Discover upcoming workshops, seminars, and empowerment programs designed to uplift and inspire.</p>
             </div>
-            
-            <div class="filter-group">
-                <label class="filter-label">Event Type</label>
-                <select name="type" class="filter-select">
-                    <option value="">All Types</option>
-                    <?php foreach ($event_types as $type): ?>
-                        <option value="<?php echo htmlspecialchars($type); ?>" <?php echo ($event_type_filter === $type) ? 'selected' : ''; ?>>
-                            <?php echo htmlspecialchars($type); ?>
-                        </option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            
-            <div class="filter-group">
-                <label class="filter-label">Status</label>
-                <select name="status" class="filter-select">
-                    <option value="">All Status</option>
-                    <option value="Scheduled" <?php echo ($status_filter === 'Scheduled') ? 'selected' : ''; ?>>Scheduled</option>
-                    <option value="Ongoing" <?php echo ($status_filter === 'Ongoing') ? 'selected' : ''; ?>>Ongoing</option>
-                    <option value="Completed" <?php echo ($status_filter === 'Completed') ? 'selected' : ''; ?>>Completed</option>
-                </select>
-            </div>
-            
-            <div class="filter-group">
-                <button type="submit" class="filter-btn">🔍 Filter Events</button>
-            </div>
-        </form>
+        </div>
     </div>
 
     <div class="container">
-        <!-- Ongoing Events -->
-        <?php if (!empty($ongoing_events)): ?>
-            <div class="section-header">
-                <h2 class="section-title">🔥 Happening Now</h2>
-                <p class="section-subtitle">Events currently taking place</p>
-            </div>
-            
-            <div class="events-grid">
-                <?php foreach ($ongoing_events as $event): ?>
-                    <div class="event-card">
-                        <div class="urgent-badge">Live Now</div>
-                        
-                        <?php if (!empty($event['image']) && file_exists($event['image'])): ?>
-                            <img src="<?php echo htmlspecialchars($event['image']); ?>" alt="Event Image" class="event-image">
-                        <?php else: ?>
-                            <div class="event-image" style="display: flex; align-items: center; justify-content: center; color: white; font-size: 3rem;">
-                                📅
-                            </div>
-                        <?php endif; ?>
-                        
-                        <div class="event-content">
-                            <h3 class="event-title"><?php echo htmlspecialchars($event['event_title']); ?></h3>
-                            
-                            <div class="event-meta">
-                                <div class="event-meta-item">
-                                    <span class="event-meta-icon">📅</span>
-                                    <span><?php echo date('M j, Y', strtotime($event['event_date'])); ?></span>
-                                </div>
-                                <div class="event-meta-item">
-                                    <span class="event-meta-icon">⏰</span>
-                                    <span><?php echo date('g:i A', strtotime($event['event_time'])); ?></span>
-                                </div>
-                                <div class="event-meta-item">
-                                    <span class="event-meta-icon">📍</span>
-                                    <span><?php echo htmlspecialchars($event['location']); ?></span>
-                                </div>
-                                <?php if (!empty($event['event_type'])): ?>
-                                    <div class="event-meta-item">
-                                        <span class="event-meta-icon">🏷️</span>
-                                        <span><?php echo htmlspecialchars($event['event_type']); ?></span>
-                                    </div>
-                                <?php endif; ?>
-                            </div>
-                            
-                            <?php if (!empty($event['description'])): ?>
-                                <p class="event-description">
-                                    <?php echo htmlspecialchars(substr($event['description'], 0, 150)); ?>
-                                    <?php if (strlen($event['description']) > 150) echo '...'; ?>
-                                </p>
-                            <?php endif; ?>
-                            
-                            <div class="event-footer">
-                                <span class="event-status status-<?php echo strtolower($event['status']); ?>">
-                                    <?php echo htmlspecialchars($event['status']); ?>
-                                </span>
-                                
-                                <?php if (!empty($event['max_participants'])): ?>
-                                    <span class="participants-info">
-                                        Max: <?php echo $event['max_participants']; ?> participants
-                                    </span>
-                                <?php endif; ?>
-                            </div>
-                        </div>
-                    </div>
-                <?php endforeach; ?>
-            </div>
-        <?php endif; ?>
+        <div class="filters">
+            <h3>SEARCH EVENTS</h3>
+            <form method="GET" action="">
+                <div class="filter-row">
+                    <input 
+                        type="text" 
+                        name="search" 
+                        class="search-input" 
+                        placeholder="Search by title, description, or location..." 
+                        value="<?php echo htmlspecialchars($search); ?>"
+                    >
+                    <select name="event_type" class="filter-select">
+                        <option value="all">All Types</option>
+                        <option value="workshop" <?php echo $event_type === 'workshop' ? 'selected' : ''; ?>>Workshop</option>
+                        <option value="seminar" <?php echo $event_type === 'seminar' ? 'selected' : ''; ?>>Seminar</option>
+                        <option value="training" <?php echo $event_type === 'training' ? 'selected' : ''; ?>>Training</option>
+                        <option value="meeting" <?php echo $event_type === 'meeting' ? 'selected' : ''; ?>>Meeting</option>
+                    </select>
+                    <select name="status" class="filter-select">
+                        <option value="all">All Status</option>
+                        <option value="scheduled" <?php echo $status_filter === 'scheduled' ? 'selected' : ''; ?>>Scheduled</option>
+                        <option value="ongoing" <?php echo $status_filter === 'ongoing' ? 'selected' : ''; ?>>Ongoing</option>
+                        <option value="completed" <?php echo $status_filter === 'completed' ? 'selected' : ''; ?>>Completed</option>
+                        <option value="cancelled" <?php echo $status_filter === 'cancelled' ? 'selected' : ''; ?>>Cancelled</option>
+                    </select>
+                </div>
+                <button type="submit" class="filter-btn">Search Events</button>
+            </form>
+        </div>
 
-        <!-- Upcoming Events -->
-        <?php if (!empty($upcoming_events)): ?>
-            <div class="section-header">
-                <h2 class="section-title">📅 Featured Events</h2>
-                <p class="section-subtitle">Be part of transformative experiences that empower individuals and strengthen our community</p>
-            </div>
-            
-            <div class="events-grid">
-                <?php foreach ($upcoming_events as $index => $event): ?>
-                    <div class="event-card" style="animation-delay: <?php echo $index * 0.1; ?>s;">
-                        <?php 
-                        $days_until = ceil((strtotime($event['event_date']) - time()) / (60 * 60 * 24));
-                        if ($days_until <= 7 && $days_until > 0): 
-                        ?>
-                            <div class="new-badge">Soon</div>
-                        <?php endif; ?>
-                        
-                        <?php if (!empty($event['image']) && file_exists($event['image'])): ?>
-                            <img src="<?php echo htmlspecialchars($event['image']); ?>" alt="Event Image" class="event-image">
-                        <?php else: ?>
-                            <div class="event-image" style="display: flex; align-items: center; justify-content: center; color: white; font-size: 3rem;">
-                                📅
-                            </div>
-                        <?php endif; ?>
-                        
-                        <div class="event-content">
-                            <h3 class="event-title"><?php echo htmlspecialchars($event['event_title']); ?></h3>
-                            
-                            <div class="event-meta">
-                                <div class="event-meta-item">
-                                    <span class="event-meta-icon">📅</span>
-                                    <span><?php echo date('M j, Y', strtotime($event['event_date'])); ?></span>
-                                </div>
-                                <div class="event-meta-item">
-                                    <span class="event-meta-icon">⏰</span>
-                                    <span><?php echo date('g:i A', strtotime($event['event_time'])); ?></span>
-                                </div>
-                                <div class="event-meta-item">
-                                    <span class="event-meta-icon">📍</span>
-                                    <span><?php echo htmlspecialchars($event['location']); ?></span>
-                                </div>
-                                <?php if (!empty($event['event_type'])): ?>
-                                    <div class="event-meta-item">
-                                        <span class="event-meta-icon">🏷️</span>
-                                        <span><?php echo htmlspecialchars($event['event_type']); ?></span>
-                                    </div>
-                                <?php endif; ?>
-                            </div>
-                            
-                            <?php if (!empty($event['description'])): ?>
-                                <p class="event-description">
-                                    <?php echo htmlspecialchars(substr($event['description'], 0, 150)); ?>
-                                    <?php if (strlen($event['description']) > 150) echo '...'; ?>
-                                </p>
-                            <?php endif; ?>
-                            
-                            <div class="event-footer">
-                                <span class="event-status status-<?php echo strtolower($event['status']); ?>">
-                                    <?php echo htmlspecialchars($event['status']); ?>
-                                </span>
-                                
-                                <?php if (!empty($event['max_participants'])): ?>
-                                    <span class="participants-info">
-                                        Max: <?php echo $event['max_participants']; ?> participants
-                                    </span>
-                                <?php endif; ?>
-                            </div>
-                        </div>
-                    </div>
-                <?php endforeach; ?>
-            </div>
-        <?php endif; ?>
-
-        <!-- Past Events -->
-        <?php if (!empty($completed_events)): ?>
-            <div class="section-header">
-                <h2 class="section-title">📚 Past Events</h2>
-                <p class="section-subtitle">Celebrating our community achievements and memories</p>
-            </div>
-            
-            <div class="events-grid">
-                <?php foreach ($completed_events as $event): ?>
-                    <div class="event-card" style="opacity: 0.8;">
-                        <?php if (!empty($event['image']) && file_exists($event['image'])): ?>
-                            <img src="<?php echo htmlspecialchars($event['image']); ?>" alt="Event Image" class="event-image">
-                        <?php else: ?>
-                            <div class="event-image" style="display: flex; align-items: center; justify-content: center; color: white; font-size: 3rem;">
-                                📅
-                            </div>
-                        <?php endif; ?>
-                        
-                        <div class="event-content">
-                            <h3 class="event-title"><?php echo htmlspecialchars($event['event_title']); ?></h3>
-                            
-                            <div class="event-meta">
-                                <div class="event-meta-item">
-                                    <span class="event-meta-icon">📅</span>
-                                    <span><?php echo date('M j, Y', strtotime($event['event_date'])); ?></span>
-                                </div>
-                                <div class="event-meta-item">
-                                    <span class="event-meta-icon">⏰</span>
-                                    <span><?php echo date('g:i A', strtotime($event['event_time'])); ?></span>
-                                </div>
-                                <div class="event-meta-item">
-                                    <span class="event-meta-icon">📍</span>
-                                    <span><?php echo htmlspecialchars($event['location']); ?></span>
-                                </div>
-                                <?php if (!empty($event['event_type'])): ?>
-                                    <div class="event-meta-item">
-                                        <span class="event-meta-icon">🏷️</span>
-                                        <span><?php echo htmlspecialchars($event['event_type']); ?></span>
-                                    </div>
-                                <?php endif; ?>
-                            </div>
-                            
-                            <?php if (!empty($event['description'])): ?>
-                                <p class="event-description">
-                                    <?php echo htmlspecialchars(substr($event['description'], 0, 150)); ?>
-                                    <?php if (strlen($event['description']) > 150) echo '...'; ?>
-                                </p>
-                            <?php endif; ?>
-                            
-                            <div class="event-footer">
-                                <span class="event-status status-<?php echo strtolower($event['status']); ?>">
-                                    <?php echo htmlspecialchars($event['status']); ?>
-                                </span>
-                                
-                                <?php if (!empty($event['max_participants'])): ?>
-                                    <span class="participants-info">
-                                        Max: <?php echo $event['max_participants']; ?> participants
-                                    </span>
-                                <?php endif; ?>
-                            </div>
-                        </div>
-                    </div>
-                <?php endforeach; ?>
-            </div>
-        <?php endif; ?>
-
-        <!-- Empty State -->
         <?php if (empty($events)): ?>
-            <div class="empty-state">
-                <div class="empty-state-icon">📅</div>
-                <h3 class="empty-state-title">No Events Found</h3>
-                <p class="empty-state-subtitle">
-                    <?php if (!empty($search_query) || !empty($event_type_filter) || !empty($status_filter)): ?>
-                        Try adjusting your search criteria or filters to find more events.
-                    <?php else: ?>
-                        Stay tuned! New events will be posted here soon.
-                    <?php endif; ?>
-                </p>
+            <div class="no-events">
+                <h3>No Events Found</h3>
+                <p>There are currently no events matching your criteria. Please check back later or modify your search.</p>
+            </div>
+        <?php else: ?>
+            <div class="events-grid">
+                <?php foreach ($events as $event): ?>
+                    <div class="event-card">
+                        <div class="event-header">
+                            <div class="event-title"><?php echo htmlspecialchars($event['title']); ?></div>
+                            <div class="event-date"><?php echo formatDate($event['event_date']); ?></div>
+                        </div>
+                        <div class="event-body">
+                            <?php if (!empty($event['description'])): ?>
+                                <div class="event-description">
+                                    <?php echo nl2br(htmlspecialchars(substr($event['description'], 0, 150))); ?>
+                                    <?php if (strlen($event['description']) > 150): ?>...<?php endif; ?>
+                                </div>
+                            <?php endif; ?>
+                            
+                            <div class="event-details">
+                                <div class="event-detail">
+                                    <span>🕒</span>
+                                    <span>
+                                        <?php echo formatTime($event['start_time']); ?>
+                                        <?php if ($event['end_time']): ?>
+                                            - <?php echo formatTime($event['end_time']); ?>
+                                        <?php endif; ?>
+                                    </span>
+                                </div>
+                                
+                                <div class="event-detail">
+                                    <span>📍</span>
+                                    <span><?php echo htmlspecialchars($event['location']); ?></span>
+                                </div>
+                                
+                                <?php if (!empty($event['organizer'])): ?>
+                                    <div class="event-detail">
+                                        <span>👤</span>
+                                        <span><?php echo htmlspecialchars($event['organizer']); ?></span>
+                                    </div>
+                                <?php endif; ?>
+                                
+                                <div class="event-detail">
+                                    <span class="status-badge <?php echo getStatusBadge($event['status']); ?>">
+                                        <?php echo htmlspecialchars($event['status']); ?>
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
             </div>
         <?php endif; ?>
     </div>
 
     <script>
-      // Mobile menu toggle functionality
-document.addEventListener('DOMContentLoaded', function() {
-    // Mobile menu toggle
-    const mobileMenu = document.querySelector('.mobile-menu');
-    const navMenu = document.querySelector('.nav-menu');
-    const bars = document.querySelectorAll('.bar');
-    let isMenuOpen = false;
+        // Mobile menu toggle
+        const mobileMenu = document.querySelector('.mobile-menu');
+        const navMenu = document.querySelector('.nav-links');
 
-    // Create mobile menu button if it doesn't exist
-    if (!mobileMenu && window.innerWidth <= 768) {
-        const nav = document.querySelector('nav');
-        const mobileMenuBtn = document.createElement('div');
-        mobileMenuBtn.className = 'mobile-menu';
-        mobileMenuBtn.innerHTML = `
-            <div class="bar"></div>
-            <div class="bar"></div>
-            <div class="bar"></div>
-        `;
-        nav.appendChild(mobileMenuBtn);
-    }
-
-    // Mobile menu toggle function
-    function toggleMobileMenu() {
-        const mobileMenuBtn = document.querySelector('.mobile-menu');
-        const navMenuEl = document.querySelector('.nav-menu');
-        const barsEl = document.querySelectorAll('.bar');
-        
-        if (!mobileMenuBtn || !navMenuEl) return;
-
-        isMenuOpen = !isMenuOpen;
-        
-        // Toggle nav menu
-        navMenuEl.classList.toggle('active', isMenuOpen);
-        
-        // Animate hamburger bars
-        if (barsEl.length >= 3) {
-            if (isMenuOpen) {
-                barsEl[0].style.transform = 'rotate(-45deg) translate(-5px, 6px)';
-                barsEl[1].style.opacity = '0';
-                barsEl[2].style.transform = 'rotate(45deg) translate(-5px, -6px)';
-                mobileMenuBtn.setAttribute('aria-expanded', 'true');
-                mobileMenuBtn.setAttribute('aria-label', 'Close menu');
-            } else {
-                barsEl[0].style.transform = 'none';
-                barsEl[1].style.opacity = '1';
-                barsEl[2].style.transform = 'none';
-                mobileMenuBtn.setAttribute('aria-expanded', 'false');
-                mobileMenuBtn.setAttribute('aria-label', 'Open menu');
-            }
-        }
-
-        // Prevent body scroll when menu is open
-        document.body.style.overflow = isMenuOpen ? 'hidden' : '';
-    }
-
-    // Add click event to mobile menu
-    if (mobileMenu) {
-        mobileMenu.addEventListener('click', toggleMobileMenu);
-        mobileMenu.setAttribute('role', 'button');
-        mobileMenu.setAttribute('aria-expanded', 'false');
-        mobileMenu.setAttribute('aria-label', 'Open menu');
-        mobileMenu.setAttribute('tabindex', '0');
-    }
-
-    // Close menu when clicking on nav links
-    const navLinks = document.querySelectorAll('.nav-menu a');
-    navLinks.forEach(link => {
-        link.addEventListener('click', () => {
-            if (isMenuOpen && window.innerWidth <= 768) {
-                toggleMobileMenu();
-            }
+        mobileMenu.addEventListener('click', () => {
+            navMenu.classList.toggle('active');
         });
-    });
 
-    // Close menu when clicking outside
-    document.addEventListener('click', function(e) {
-        const nav = document.querySelector('nav');
-        if (isMenuOpen && !nav.contains(e.target)) {
-            toggleMobileMenu();
-        }
-    });
-
-    // Handle keyboard navigation for mobile menu
-    if (mobileMenu) {
-        mobileMenu.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                toggleMobileMenu();
-            }
-            if (e.key === 'Escape' && isMenuOpen) {
-                toggleMobileMenu();
-            }
-        });
-    }
-
-    // Handle window resize
-    window.addEventListener('resize', function() {
-        const mobileMenuBtn = document.querySelector('.mobile-menu');
-        const navMenuEl = document.querySelector('.nav-menu');
-        
-        if (window.innerWidth > 768) {
-            // Desktop view - hide mobile menu, show nav menu
-            if (mobileMenuBtn) {
-                mobileMenuBtn.style.display = 'none';
-            }
-            if (navMenuEl) {
-                navMenuEl.classList.remove('active');
-                navMenuEl.style.display = 'flex';
-            }
-            document.body.style.overflow = '';
-            isMenuOpen = false;
-            
-            // Reset hamburger bars
-            const barsEl = document.querySelectorAll('.bar');
-            barsEl.forEach(bar => {
-                bar.style.transform = 'none';
-                bar.style.opacity = '1';
-            });
-        } else {
-            // Mobile view - show mobile menu button
-            if (mobileMenuBtn) {
-                mobileMenuBtn.style.display = 'flex';
-            }
-            if (navMenuEl && !isMenuOpen) {
-                navMenuEl.style.display = 'none';
-            }
-        }
-    });
-
-    // Smooth scrolling animation for cards
-    const cards = document.querySelectorAll('.event-card');
-    
-    const observer = new IntersectionObserver((entries) => {
-        entries.forEach(entry => {
-            if (entry.isIntersecting) {
-                entry.target.style.opacity = '1';
-                entry.target.style.transform = 'translateY(0)';
-                entry.target.classList.add('fade-in');
-            }
-        });
-    }, {
-        threshold: 0.1,
-        rootMargin: '0px 0px -50px 0px'
-    });
-    
-    cards.forEach(card => {
-        observer.observe(card);
-    });
-
-    // Auto-clear filters button
-    function clearFilters() {
-        const form = document.querySelector('.filter-section form');
-        if (!form) return;
-        
-        const inputs = form.querySelectorAll('input, select');
-        inputs.forEach(input => {
-            if (input.type === 'text' || input.type === 'search') {
-                input.value = '';
-            } else if (input.tagName === 'SELECT') {
-                input.selectedIndex = 0;
-            }
-        });
-        
-        // Clear URL parameters and reload
-        const url = new URL(window.location);
-        url.search = '';
-        window.history.replaceState({}, document.title, url.pathname);
-        
-        if (form.submit) {
-            form.submit();
-        } else {
-            window.location.reload();
-        }
-    }
-
-    // Add clear filters button if filters are active
-    if (window.location.search) {
-        const filterSection = document.querySelector('.filter-section');
-        const filterGrid = document.querySelector('.filter-grid');
-        
-        if (filterSection && filterGrid) {
-            const clearBtn = document.createElement('button');
-            clearBtn.textContent = '❌ Clear Filters';
-            clearBtn.className = 'filter-btn clear-btn';
-            clearBtn.type = 'button';
-            clearBtn.style.background = 'linear-gradient(135deg, #6b7280, #374151)';
-            clearBtn.style.marginTop = '1rem';
-            clearBtn.setAttribute('aria-label', 'Clear all filters');
-            
-            clearBtn.addEventListener('click', function(e) {
-                e.preventDefault();
-                clearFilters();
-            });
-            
-            // Add clear button to filter grid
-            const clearGroup = document.createElement('div');
-            clearGroup.className = 'filter-group clear-group';
-            clearGroup.appendChild(clearBtn);
-            filterGrid.appendChild(clearGroup);
-        }
-    }
-
-    // Enhance form submission with loading state
-    const form = document.querySelector('.filter-section form');
-    if (form) {
-        form.addEventListener('submit', function(e) {
-            const submitBtn = this.querySelector('button[type="submit"], input[type="submit"]');
-            if (submitBtn && !submitBtn.disabled) {
-                const originalText = submitBtn.textContent || submitBtn.value;
-                submitBtn.innerHTML = '⏳ Loading...';
-                submitBtn.disabled = true;
-                submitBtn.style.opacity = '0.7';
-                
-                // Re-enable button after timeout in case of errors
-                setTimeout(() => {
-                    if (submitBtn) {
-                        submitBtn.innerHTML = originalText;
-                        submitBtn.disabled = false;
-                        submitBtn.style.opacity = '1';
-                    }
-                }, 5000);
-            }
-        });
-    }
-
-    // Enhanced hover effects for cards (only on non-touch devices)
-    const cards2 = document.querySelectorAll('.event-card');
-    const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-    
-    if (!isTouchDevice) {
-        cards2.forEach(card => {
-            card.addEventListener('mouseenter', function() {
-                this.style.boxShadow = '0 15px 35px rgba(0, 0, 0, 0.2)';
-                this.style.transform = 'translateY(-8px)';
-            });
-            
-            card.addEventListener('mouseleave', function() {
-                this.style.boxShadow = '0 10px 30px rgba(0, 0, 0, 0.15)';
-                this.style.transform = 'translateY(0)';
+        // Close mobile menu when clicking on a link
+        document.querySelectorAll('.nav-links a').forEach(link => {
+            link.addEventListener('click', () => {
+                navMenu.classList.remove('active');
             });
         });
-    }
 
-    // Add touch feedback for mobile devices
-    if (isTouchDevice) {
-        cards2.forEach(card => {
-            card.addEventListener('touchstart', function() {
-                this.style.transform = 'scale(0.98)';
-                this.style.transition = 'transform 0.1s ease';
-            });
-            
-            card.addEventListener('touchend', function() {
-                this.style.transform = 'scale(1)';
-                setTimeout(() => {
-                    this.style.transition = 'all 0.4s ease';
-                }, 100);
-            });
-        });
-    }
-
-    // Handle focus states for accessibility
-    const focusableElements = document.querySelectorAll('a, button, input, select, textarea, [tabindex]:not([tabindex="-1"])');
-    
-    focusableElements.forEach(element => {
-        element.addEventListener('focus', function() {
-            this.style.outline = '2px solid #ec4899';
-            this.style.outlineOffset = '2px';
-        });
-        
-        element.addEventListener('blur', function() {
-            this.style.outline = '';
-            this.style.outlineOffset = '';
-        });
-    });
-
-    // Header scroll effect
-    let lastScrollTop = 0;
-    const header = document.querySelector('header');
-    
-    window.addEventListener('scroll', function() {
-        const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-        
-        if (scrollTop > lastScrollTop && scrollTop > 100) {
-            // Scrolling down
-            header.style.transform = 'translateY(-100%)';
-        } else {
-            // Scrolling up
-            header.style.transform = 'translateY(0)';
-        }
-        
-        // Add backdrop blur effect
-        if (scrollTop > 50) {
-            header.style.backdropFilter = 'blur(20px)';
-            header.style.background = 'rgba(255, 255, 255, 0.9)';
-        } else {
-            header.style.backdropFilter = 'blur(15px)';
-            header.style.background = 'rgba(255, 255, 255, 0.95)';
-        }
-        
-        lastScrollTop = scrollTop;
-    });
-
-    // Lazy loading for images
-    const images = document.querySelectorAll('.event-image');
-    const imageObserver = new IntersectionObserver((entries) => {
-        entries.forEach(entry => {
-            if (entry.isIntersecting) {
-                const img = entry.target;
-                if (img.dataset.src) {
-                    img.src = img.dataset.src;
-                    img.classList.add('loaded');
-                    imageObserver.unobserve(img);
-                }
+        // Close mobile menu when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!mobileMenu.contains(e.target) && !navMenu.contains(e.target)) {
+                navMenu.classList.remove('active');
             }
         });
-    }, {
-        rootMargin: '50px 0px'
-    });
-    
-    images.forEach(img => {
-        if (img.dataset.src) {
-            imageObserver.observe(img);
-        }
-    });
-
-    // Smooth scroll for anchor links
-    const anchorLinks = document.querySelectorAll('a[href^="#"]');
-    anchorLinks.forEach(link => {
-        link.addEventListener('click', function(e) {
-            e.preventDefault();
-            const targetId = this.getAttribute('href').substring(1);
-            const targetElement = document.getElementById(targetId);
-            
-            if (targetElement) {
-                const headerHeight = header.offsetHeight;
-                const targetPosition = targetElement.offsetTop - headerHeight - 20;
-                
-                window.scrollTo({
-                    top: targetPosition,
-                    behavior: 'smooth'
-                });
-            }
-        });
-    });
-
-    // Initialize tooltips (if any)
-    const tooltipElements = document.querySelectorAll('[data-tooltip]');
-    tooltipElements.forEach(element => {
-        element.addEventListener('mouseenter', function() {
-            const tooltip = document.createElement('div');
-            tooltip.className = 'tooltip';
-            tooltip.textContent = this.dataset.tooltip;
-            tooltip.style.cssText = `
-                position: absolute;
-                background: #1f2937;
-                color: white;
-                padding: 0.5rem 1rem;
-                border-radius: 6px;
-                font-size: 0.875rem;
-                z-index: 1000;
-                white-space: nowrap;
-                opacity: 0;
-                transition: opacity 0.3s ease;
-            `;
-            
-            document.body.appendChild(tooltip);
-            
-            const rect = this.getBoundingClientRect();
-            tooltip.style.left = rect.left + (rect.width / 2) - (tooltip.offsetWidth / 2) + 'px';
-            tooltip.style.top = rect.top - tooltip.offsetHeight - 10 + 'px';
-            
-            setTimeout(() => tooltip.style.opacity = '1', 10);
-            
-            this.addEventListener('mouseleave', function() {
-                if (tooltip.parentNode) {
-                    tooltip.parentNode.removeChild(tooltip);
-                }
-            }, { once: true });
-        });
-    });
-});
     </script>
 </body>
 </html>
