@@ -734,7 +734,7 @@ try {
     <!-- Header -->
     <header class="header">
         <div class="logo-container">
-            <div class="logo-text">JANALISU EMPOWERMENT</div>
+            <div class="logo-text">JANALISU EMPOWERMENT GROUP</div>
         </div>
         
         <button class="nav-toggle" id="navToggle">

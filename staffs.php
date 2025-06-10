@@ -668,7 +668,7 @@ if (isset($_GET['edit']) && is_numeric($_GET['edit'])) {
     <header class="header">
         <div class="logo-container">
             <img src="janalisu.jpg" alt="Janalisu Logo" class="logo-image">
-            <h1 class="logo-text">JANALISU</h1>
+            <h1 class="logo-text">JANALISU EMPOWERMENT GROUP</h1>
         </div>
         
         <button class="mobile-menu-btn" id="mobileMenuBtn">

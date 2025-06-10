@@ -1,60 +1,96 @@
 <?php
-require_once 'config.php'; // Includes session and DB connection
+// Start session at the very beginning - only if not already started
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 
-// Optional: Check if admin is logged in
-// if (!isset($_SESSION['admin_logged_in'])) {
-//     header('Location: login.php');
-//     exit();
-// }
+require_once 'config.php'; // Includes DB connection
+
+// Debug: Check session variables (remove in production)
+// echo "Session admin_logged_in: " . (isset($_SESSION['admin_logged_in']) ? $_SESSION['admin_logged_in'] : 'not set') . "<br>";
+// echo "Session user_role: " . (isset($_SESSION['user_role']) ? $_SESSION['user_role'] : 'not set') . "<br>";
+
+// Check if admin is logged in - redirect to login if not
+if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
+    // Make sure we don't redirect if we're already on the login page
+    if (basename($_SERVER['PHP_SELF']) !== 'login.php') {
+        header('Location: login.php');
+        exit();
+    }
+}
+
+// Optional: Additional security check for admin role (comment out if not using roles)
+/*
+if (!isset($_SESSION['user_role']) || $_SESSION['user_role'] !== 'admin') {
+    if (basename($_SERVER['PHP_SELF']) !== 'login.php') {
+        header('Location: login.php');
+        exit();
+    }
+}
+*/
+
+// Optional: Session timeout check (e.g., 30 minutes)
+$session_timeout = 1800; // 30 minutes in seconds
+if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity']) > $session_timeout) {
+    // Session expired
+    session_unset();
+    session_destroy();
+    header('Location: login.php?timeout=1');
+    exit();
+}
+$_SESSION['last_activity'] = time(); // Update last activity time
 
 try {
     // Total students
     $stmt = $pdo->query("SELECT COUNT(*) as total_students FROM students");
     $total_students = $stmt->fetch(PDO::FETCH_ASSOC)['total_students'];
-    
+        
     // Active students
     $stmt = $pdo->query("SELECT COUNT(*) as active_students FROM students WHERE status = 'Active'");
     $active_students = $stmt->fetch(PDO::FETCH_ASSOC)['active_students'];
-    
+        
     // Total staff/employees
     $stmt = $pdo->query("SELECT COUNT(*) as total_staff FROM employees");
     $total_staff = $stmt->fetch(PDO::FETCH_ASSOC)['total_staff'];
-    
+        
     // Active staff
     $stmt = $pdo->query("SELECT COUNT(*) as active_staff FROM employees WHERE status = 'Active'");
     $active_staff = $stmt->fetch(PDO::FETCH_ASSOC)['active_staff'];
-    
+        
     // Upcoming events
     $stmt = $pdo->query("SELECT COUNT(*) as upcoming_events FROM events WHERE status = 'Scheduled' AND event_date >= CURDATE()");
     $upcoming_events = $stmt->fetch(PDO::FETCH_ASSOC)['upcoming_events'];
-    
+        
     // Total events
     $stmt = $pdo->query("SELECT COUNT(*) as total_events FROM events");
     $total_events = $stmt->fetch(PDO::FETCH_ASSOC)['total_events'];
-    
+        
     // Completed events
     $stmt = $pdo->query("SELECT COUNT(*) as completed_events FROM events WHERE status = 'Completed'");
     $completed_events = $stmt->fetch(PDO::FETCH_ASSOC)['completed_events'];
-    
+        
     // Success rate
     $success_rate = $total_events > 0 ? round(($completed_events / $total_events) * 100) : 0;
-    
+        
     // Monthly student changes
-    $stmt = $pdo->query("SELECT COUNT(*) as last_month_students 
-                         FROM students 
-                         WHERE MONTH(enrollment_date) = MONTH(CURDATE()) - 1 
-                         AND YEAR(enrollment_date) = YEAR(CURDATE())");
+    $stmt = $pdo->query("SELECT COUNT(*) as last_month_students
+                          FROM students
+                          WHERE MONTH(enrollment_date) = MONTH(CURDATE()) - 1
+                          AND YEAR(enrollment_date) = YEAR(CURDATE())");
     $last_month_students = $stmt->fetch(PDO::FETCH_ASSOC)['last_month_students'];
-    
-    $stmt = $pdo->query("SELECT COUNT(*) as this_month_students 
-                         FROM students 
-                         WHERE MONTH(enrollment_date) = MONTH(CURDATE()) 
-                         AND YEAR(enrollment_date) = YEAR(CURDATE())");
+        
+    $stmt = $pdo->query("SELECT COUNT(*) as this_month_students
+                          FROM students
+                          WHERE MONTH(enrollment_date) = MONTH(CURDATE())
+                          AND YEAR(enrollment_date) = YEAR(CURDATE())");
     $this_month_students = $stmt->fetch(PDO::FETCH_ASSOC)['this_month_students'];
-    
+        
     $student_change = $this_month_students - $last_month_students;
     
 } catch(PDOException $e) {
+    // Log error for debugging (don't expose to user)
+    error_log("Dashboard query error: " . $e->getMessage());
+    
     // Set defaults on error
     $total_students = 0;
     $active_students = 0;
@@ -64,8 +100,11 @@ try {
     $success_rate = 0;
     $student_change = 0;
 }
-?>
 
+// Optional: Function to get admin name for display
+$admin_name = isset($_SESSION['admin_name']) ? $_SESSION['admin_name'] : 'Admin';
+$admin_email = isset($_SESSION['admin_email']) ? $_SESSION['admin_email'] : '';
+?>
 
 <!DOCTYPE html>
 <html lang="en">
@@ -176,7 +215,10 @@ try {
             border-radius: 25px;
             transition: all 0.3s ease;
             text-align: center;
-            display: block;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
         }
 
         .nav-item.active {
@@ -192,6 +234,15 @@ try {
 
         .nav-item.active:hover {
             background: #c2185b;
+        }
+
+        .nav-icon {
+            font-size: 1.2rem;
+            transition: transform 0.2s ease;
+        }
+
+        .nav-item:hover .nav-icon {
+            transform: scale(1.1);
         }
 
         .user-section {
@@ -217,6 +268,9 @@ try {
             font-weight: 500;
             transition: all 0.3s ease;
             font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
 
         .logout-btn:hover {
@@ -339,7 +393,10 @@ try {
             cursor: pointer;
             transition: all 0.3s ease;
             text-decoration: none;
-            display: inline-block;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
         }
 
@@ -356,6 +413,15 @@ try {
 
         .nav-btn.active:hover {
             background: #c2185b;
+        }
+
+        .nav-btn-icon {
+            font-size: 1.2rem;
+            transition: transform 0.2s ease;
+        }
+
+        .nav-btn:hover .nav-btn-icon {
+            transform: scale(1.1);
         }
 
         /* Tablet Styles - 768px and up */
@@ -678,15 +744,30 @@ try {
                 </button>
                 
                 <nav class="nav-menu" id="navMenu">
-                    <a href="admin_dashboard.php" class="nav-item active">Dashboard</a>
-                    <a href="students.php" class="nav-item">Students</a>
-                    <a href="staffs.php" class="nav-item">Staff</a>
-                    <a href="add_events.php" class="nav-item">Events</a>
+                    <a href="admin_dashboard.php" class="nav-item active">
+                        <span class="nav-icon">📊</span>
+                        <span>Dashboard</span>
+                    </a>
+                    <a href="students.php" class="nav-item">
+                        <span class="nav-icon">👥</span>
+                        <span>Students</span>
+                    </a>
+                    <a href="staffs.php" class="nav-item">
+                        <span class="nav-icon">👨‍💼</span>
+                        <span>Staff</span>
+                    </a>
+                    <a href="add_events.php" class="nav-item">
+                        <span class="nav-icon">📅</span>
+                        <span>Events</span>
+                    </a>
                 </nav>
                 
                 <div class="user-section">
                     <span class="welcome-text">Welcome,<br>Admin</span>
-                    <button class="logout-btn" onclick="logout()">Logout</button>
+                    <button class="logout-btn" onclick="logout()">
+                        <span class="nav-icon">🚪</span>
+                        <span>Logout</span>
+                    </button>
                 </div>
             </div>
         </div>
@@ -733,9 +814,18 @@ try {
             
             <!-- Navigation Buttons -->
             <div class="nav-buttons">
-                <a href="students.php" class="nav-btn active">Students</a>
-                <a href="staffs.php" class="nav-btn">Staff</a>
-                <a href="add_events.php" class="nav-btn">Events</a>
+                <a href="students.php" class="nav-btn active">
+                    <span class="nav-btn-icon">👥</span>
+                    <span>Students</span>
+                </a>
+                <a href="staffs.php" class="nav-btn">
+                    <span class="nav-btn-icon">👨‍💼</span>
+                    <span>Staff</span>
+                </a>
+                <a href="add_events.php" class="nav-btn">
+                    <span class="nav-btn-icon">📅</span>
+                    <span>Events</span>
+                </a>
             </div>
         </div>
     </main>

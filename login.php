@@ -1,92 +1,100 @@
 <?php
-require_once 'config.php';
-
-// Check if user is already logged in
-if (isset($_SESSION['admin_id'])) {
-    header('Location: admin_dashboard.php');
-    exit();
+// Start session at the very beginning - only if not already started
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
 }
 
-$error_message = '';
-$success_message = '';
+require_once 'config.php';
+$error = '';
+$success = '';
 
-// Handle login form submission
+// Check if already logged in - use same session variable as admin_dashboard.php
+if (isset($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in'] === true) {
+    header('Location: admin_dashboard.php'); // Match the actual dashboard filename
+    exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $email = trim($_POST['email'] ?? '');
+    $username = trim($_POST['username'] ?? '');
     $password = $_POST['password'] ?? '';
     $remember_me = isset($_POST['remember_me']);
-    
-    // Validate input
-    if (empty($email) || empty($password)) {
-        $error_message = 'Please enter both email and password.';
-    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        $error_message = 'Please enter a valid email address.';
+   
+    if (empty($username) || empty($password)) {
+        $error = 'Please enter both username and password.';
     } else {
         try {
-            // Check if user exists and get user data
-            $stmt = $pdo->prepare("SELECT admin_id, first_name, last_name, email, password, position, department, status FROM admins WHERE email = ?");
-            $stmt->execute([$email]);
-            $user = $stmt->fetch(PDO::FETCH_ASSOC);
-            
-            if ($user && password_verify($password, $user['password'])) {
-                // Check if account is active
-                if ($user['status'] !== 'Active') {
-                    $error_message = 'Your account is not active. Please contact the administrator.';
-                } else {
-                    // Login successful - set session variables
-                    $_SESSION['admin_id'] = $user['admin_id'];
-                    $_SESSION['admin_email'] = $user['email'];
-                    $_SESSION['admin_name'] = $user['first_name'] . ' ' . $user['last_name'];
-                    $_SESSION['admin_position'] = $user['position'];
-                    $_SESSION['admin_department'] = $user['department'];
-                    $_SESSION['login_time'] = time();
-                    
-                    // Update last login
-                    $updateStmt = $pdo->prepare("UPDATE admins SET last_login = NOW() WHERE admin_id = ?");
-                    $updateStmt->execute([$user['admin_id']]);
-                    
-                    // Handle remember me functionality
-                    if ($remember_me) {
-                        $token = bin2hex(random_bytes(32));
-                        $expires = time() + (30 * 24 * 60 * 60); // 30 days
-                        
-                        // Store token in database
-                        $tokenStmt = $pdo->prepare("INSERT INTO remember_tokens (admin_id, token, expires_at) VALUES (?, ?, FROM_UNIXTIME(?)) ON DUPLICATE KEY UPDATE token = VALUES(token), expires_at = VALUES(expires_at)");
-                        $tokenStmt->execute([$user['admin_id'], hash('sha256', $token), $expires]);
-                        
-                        // Set cookie
-                        setcookie('remember_token', $token, $expires, '/', '', true, true);
-                    }
-                    
-                    // Return JSON response for AJAX requests
-                    if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest') {
-                        echo json_encode(['success' => true, 'message' => 'Login successful!', 'redirect' => 'admin_dashboard.php']);
-                        exit();
-                    }
-                    
-                    // Redirect to dashboard
-                    header('Location: admin_dashboard.php');
-                    exit();
+            $pdo = getDBConnection();
+           
+            // Get admin by username or email
+            $stmt = $pdo->prepare("SELECT * FROM admins WHERE (username = ? OR email = ?) AND status = 'active'");
+            $stmt->execute([$username, $username]);
+            $admin = $stmt->fetch();
+           
+            if ($admin && password_verify($password, $admin['password'])) {
+                // Update last login
+                $updateStmt = $pdo->prepare("UPDATE admins SET last_login = NOW() WHERE id = ?");
+                $updateStmt->execute([$admin['id']]);
+               
+                // Set session variables - MATCH admin_dashboard.php expectations
+                $_SESSION['admin_logged_in'] = true;  // This is what admin_dashboard.php checks for
+                $_SESSION['admin_id'] = $admin['id'];
+                $_SESSION['admin_username'] = $admin['username'];
+                $_SESSION['user_role'] = $admin['role']; // Match the variable name used in dashboard
+                $_SESSION['admin_name'] = $admin['full_name'];
+                $_SESSION['admin_email'] = $admin['email'];
+                $_SESSION['last_activity'] = time(); // Initialize last activity for session timeout
+                $_SESSION['login_time'] = time();
+               
+                // Set remember me cookie if checked
+                if ($remember_me) {
+                    $token = bin2hex(random_bytes(32));
+                    setcookie('remember_token', $token, time() + (30 * 24 * 60 * 60), '/', '', true, true); // 30 days
+                   
+                    // Store token in database
+                    $stmt = $pdo->prepare("UPDATE admins SET remember_token = ? WHERE id = ?");
+                    $stmt->execute([$token, $admin['id']]);
                 }
+               
+                // Redirect to dashboard - use correct filename
+                header('Location: admin_dashboard.php');
+                exit;
             } else {
-                $error_message = 'Invalid email or password.';
+                $error = 'Invalid username/email or password.';
             }
         } catch (PDOException $e) {
-            $error_message = 'Login failed. Please try again later.';
-            error_log("Login error: " . $e->getMessage());
+            error_log("Login error: " . $e->getMessage()); // Log for debugging
+            $error = 'Login failed. Please try again.';
         }
-    }
-    
-    // Return JSON response for AJAX requests
-    if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest') {
-        echo json_encode(['success' => false, 'message' => $error_message]);
-        exit();
     }
 }
 
-// Check for success message from registration
-if (isset($_GET['registered']) && $_GET['registered'] === 'success') {
-    $success_message = 'Registration successful! You can now login with your credentials.';
+// Check for remember me cookie
+if (isset($_COOKIE['remember_token']) && !isset($_SESSION['admin_logged_in'])) {
+    try {
+        $pdo = getDBConnection();
+        $stmt = $pdo->prepare("SELECT * FROM admins WHERE remember_token = ? AND status = 'active'");
+        $stmt->execute([$_COOKIE['remember_token']]);
+        $admin = $stmt->fetch();
+       
+        if ($admin) {
+            // Set session variables - MATCH admin_dashboard.php expectations
+            $_SESSION['admin_logged_in'] = true;
+            $_SESSION['admin_id'] = $admin['id'];
+            $_SESSION['admin_username'] = $admin['username'];
+            $_SESSION['user_role'] = $admin['role'];
+            $_SESSION['admin_name'] = $admin['full_name'];
+            $_SESSION['admin_email'] = $admin['email'];
+            $_SESSION['last_activity'] = time();
+            $_SESSION['login_time'] = time();
+           
+            header('Location: admin_dashboard.php');
+            exit;
+        }
+    } catch (PDOException $e) {
+        error_log("Remember me error: " . $e->getMessage());
+        // Clear invalid cookie
+        setcookie('remember_token', '', time() - 3600, '/');
+    }
 }
 ?>
 <!DOCTYPE html>
@@ -94,7 +102,7 @@ if (isset($_GET['registered']) && $_GET['registered'] === 'success') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - JANALISU EMPOWERMENT GROUP</title>
+    <title>Admin Login</title>
     <style>
         * {
             margin: 0;
@@ -103,724 +111,413 @@ if (isset($_GET['registered']) && $_GET['registered'] === 'success') {
         }
 
         body {
-            font-family: 'Arial', sans-serif;
-            line-height: 1.6;
-            color: #333;
-            overflow-x: hidden;
-            background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            position: relative;
+            overflow: hidden;
         }
 
-        /* Header and Navigation */
-        header {
+        body::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 1px, transparent 1px);
+            background-size: 50px 50px;
+            animation: float 20s linear infinite;
+        }
+
+        @keyframes float {
+            0% { transform: translate(0, 0) rotate(0deg); }
+            100% { transform: translate(-50px, -50px) rotate(360deg); }
+        }
+
+        .back-to-home {
             position: fixed;
-            top: 0;
-            width: 100%;
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(15px);
+            top: 20px;
+            left: 20px;
             z-index: 1000;
-            padding: 1rem 0;
-            box-shadow: 0 4px 30px rgba(236, 72, 153, 0.1);
+        }
+
+        .back-to-home a {
+            display: inline-flex;
+            align-items: center;
+            padding: 12px 20px;
+            background: rgba(255, 255, 255, 0.9);
+            color: #667eea;
+            text-decoration: none;
+            border-radius: 25px;
+            font-weight: 600;
+            font-size: 14px;
             transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
         }
 
-        nav {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 0 2rem;
-        }
-
-        .logo-container {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-        }
-
-        .logo-image {
-            width: 80px;
-            height: 80px;
-            border-radius: 50%;
-            object-fit: cover;
-            border: 3px solid transparent;
-            background: linear-gradient(white, white) padding-box,
-                        linear-gradient(135deg, #ec4899 0%, #8b5cf6 50%, #06b6d4 100%) border-box;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
-        }
-
-        .logo-image:hover {
-            transform: scale(1.05);
+        .back-to-home a:hover {
+            background: white;
+            transform: translateY(-2px);
             box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
         }
 
-        .logo-text {
-            font-size: 1.8rem;
+        .back-to-home a::before {
+            content: '←';
+            margin-right: 8px;
+            font-size: 16px;
             font-weight: bold;
-            background: linear-gradient(135deg, #ec4899 0%, #8b5cf6 50%, #06b6d4 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            margin: 0;
         }
 
-        .nav-menu {
-            display: flex;
-            list-style: none;
-            gap: 2rem;
-        }
-
-        .nav-menu a {
-            text-decoration: none;
-            color: #333;
-            font-weight: 500;
-            transition: all 0.3s ease;
-            position: relative;
-        }
-
-        .nav-menu a:hover {
-            color: #ec4899;
-            transform: translateY(-2px);
-        }
-
-        .nav-menu a::after {
-            content: '';
-            position: absolute;
-            width: 0;
-            height: 3px;
-            bottom: -5px;
-            left: 0;
-            background: linear-gradient(135deg, #ec4899 0%, #8b5cf6 100%);
-            transition: width 0.3s ease;
-            border-radius: 2px;
-        }
-
-        .nav-menu a:hover::after {
-            width: 100%;
-        }
-
-        .mobile-menu {
-            display: none;
-            flex-direction: column;
-            cursor: pointer;
-        }
-
-        .bar {
-            width: 25px;
-            height: 3px;
-            background: #ec4899;
-            margin: 3px 0;
-            transition: 0.3s;
-            border-radius: 2px;
-        }
-
-        /* Login Container */
         .login-container {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            padding: 2rem;
-            margin-top: 80px;
-        }
-
-        .login-card {
-            background: white;
-            border-radius: 25px;
-            box-shadow: 0 25px 60px rgba(0, 0, 0, 0.1);
-            padding: 3rem;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.15);
             width: 100%;
-            max-width: 450px;
+            max-width: 400px;
             position: relative;
-            overflow: hidden;
-            border: 2px solid transparent;
-            transition: all 0.4s ease;
+            z-index: 1;
+            transform: translateY(0);
+            transition: all 0.3s ease;
         }
 
-        .login-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 5px;
-            background: linear-gradient(135deg, #ec4899 0%, #8b5cf6 50%, #06b6d4 100%);
+        .login-container:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 35px 60px rgba(0, 0, 0, 0.2);
         }
 
-        .login-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 35px 80px rgba(236, 72, 153, 0.15);
-        }
-
-        .login-title {
+        .login-header {
             text-align: center;
-            font-size: 2.5rem;
-            margin-bottom: 0.5rem;
-            background: linear-gradient(135deg, #ec4899 0%, #8b5cf6 50%, #06b6d4 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            font-weight: 800;
+            margin-bottom: 30px;
         }
 
-        .login-subtitle {
-            text-align: center;
-            color: #64748b;
-            margin-bottom: 2rem;
-            font-size: 1rem;
+        .login-header .logo {
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 50%;
+            margin: 0 auto 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            color: white;
+            font-weight: bold;
+        }
+
+        .login-header h1 {
+            color: #333;
+            font-size: 28px;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+
+        .login-header p {
+            color: #666;
+            font-size: 16px;
         }
 
         .form-group {
-            margin-bottom: 1.5rem;
+            margin-bottom: 25px;
             position: relative;
         }
 
-        .form-label {
+        .form-group label {
             display: block;
-            margin-bottom: 0.5rem;
-            color: #475569;
+            margin-bottom: 8px;
+            color: #333;
             font-weight: 600;
-            font-size: 1rem;
+            font-size: 14px;
         }
 
-        .required {
-            color: #dc2626;
-        }
-
-        .form-input {
+        .form-group input {
             width: 100%;
-            padding: 1rem 1.2rem;
-            border: 2px solid #e2e8f0;
-            border-radius: 15px;
-            font-size: 1rem;
+            padding: 15px 20px;
+            border: 2px solid #e1e1e1;
+            border-radius: 12px;
+            font-size: 16px;
             transition: all 0.3s ease;
-            background: #f8fafc;
+            background: rgba(249, 249, 249, 0.8);
         }
 
-        .form-input:focus {
+        .form-group input:focus {
             outline: none;
-            border-color: #ec4899;
+            border-color: #667eea;
+            box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
             background: white;
-            box-shadow: 0 0 20px rgba(236, 72, 153, 0.1);
             transform: translateY(-2px);
         }
 
-        .password-toggle {
-            position: absolute;
-            right: 15px;
-            top: 50%;
-            transform: translateY(-50%);
-            cursor: pointer;
-            color: #64748b;
-            font-size: 1.2rem;
-            transition: color 0.3s ease;
-        }
-
-        .password-toggle:hover {
-            color: #ec4899;
-        }
-
-        .form-options {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 2rem;
-            font-size: 0.9rem;
-        }
-
-        .remember-me {
+        .checkbox-group {
             display: flex;
             align-items: center;
-            gap: 0.5rem;
-            color: #64748b;
+            margin-bottom: 25px;
         }
 
-        .remember-me input[type="checkbox"] {
-            width: 18px;
-            height: 18px;
-            accent-color: #ec4899;
+        .checkbox-group input[type="checkbox"] {
+            width: auto;
+            margin-right: 10px;
+            transform: scale(1.2);
+        }
+
+        .checkbox-group label {
+            color: #666;
+            font-size: 14px;
             cursor: pointer;
+            margin-bottom: 0;
         }
 
-        .forgot-password {
-            color: #ec4899;
-            text-decoration: none;
-            font-weight: 600;
-            transition: color 0.3s ease;
-        }
-
-        .forgot-password:hover {
-            color: #8b5cf6;
-        }
-
-        .login-btn {
+        .btn {
             width: 100%;
-            padding: 1.2rem;
-            background: linear-gradient(135deg, #ec4899 0%, #8b5cf6 50%, #06b6d4 100%);
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             border: none;
-            border-radius: 15px;
-            font-size: 1.1rem;
+            border-radius: 12px;
+            font-size: 16px;
             font-weight: 600;
             cursor: pointer;
-            transition: all 0.4s ease;
-            box-shadow: 0 10px 30px rgba(236, 72, 153, 0.3);
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
             position: relative;
             overflow: hidden;
-            margin-bottom: 2rem;
         }
 
-        .login-btn::before {
+        .btn::before {
             content: '';
             position: absolute;
             top: 0;
             left: -100%;
             width: 100%;
             height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
-            transition: left 0.5s;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            transition: left 0.5s ease;
         }
 
-        .login-btn:hover::before {
+        .btn:hover::before {
             left: 100%;
         }
 
-        .login-btn:hover {
+        .btn:hover {
             transform: translateY(-3px);
-            box-shadow: 0 15px 40px rgba(236, 72, 153, 0.4);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
         }
 
-        .login-btn:active {
+        .btn:active {
             transform: translateY(-1px);
+        }
+
+        .alert {
+            padding: 15px 20px;
+            border-radius: 12px;
+            margin-bottom: 25px;
+            font-size: 14px;
+            font-weight: 500;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .alert::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background: currentColor;
+        }
+
+        .alert-error {
+            background: rgba(255, 238, 238, 0.9);
+            color: #c33;
+            border: 1px solid rgba(255, 204, 204, 0.5);
+        }
+
+        .alert-success {
+            background: rgba(238, 255, 238, 0.9);
+            color: #3c3;
+            border: 1px solid rgba(204, 255, 204, 0.5);
         }
 
         .register-link {
             text-align: center;
-            color: #64748b;
+            margin-top: 25px;
+            padding-top: 25px;
+            border-top: 1px solid rgba(238, 238, 238, 0.5);
         }
 
         .register-link a {
-            color: #ec4899;
+            color: #667eea;
             text-decoration: none;
             font-weight: 600;
-            transition: color 0.3s ease;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .register-link a::after {
+            content: '';
+            position: absolute;
+            bottom: -2px;
+            left: 0;
+            width: 0;
+            height: 2px;
+            background: #764ba2;
+            transition: width 0.3s ease;
+        }
+
+        .register-link a:hover::after {
+            width: 100%;
         }
 
         .register-link a:hover {
-            color: #8b5cf6;
+            color: #764ba2;
         }
 
-        .error-message {
-            background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
-            color: #dc2626;
-            padding: 1rem;
-            border-radius: 10px;
-            margin-bottom: 1.5rem;
-            border-left: 4px solid #dc2626;
-            display: none;
-            animation: slideDown 0.3s ease;
+        .forgot-password {
+            text-align: center;
+            margin-top: 15px;
         }
 
-        .success-message {
-            background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
-            color: #16a34a;
-            padding: 1rem;
-            border-radius: 10px;
-            margin-bottom: 1.5rem;
-            border-left: 4px solid #16a34a;
-            display: none;
-            animation: slideDown 0.3s ease;
+        .forgot-password a {
+            color: #888;
+            text-decoration: none;
+            font-size: 14px;
+            transition: color 0.3s ease;
         }
 
-        @keyframes slideDown {
-            from {
-                opacity: 0;
-                transform: translateY(-10px);
+        .forgot-password a:hover {
+            color: #667eea;
+        }
+
+        @media (max-width: 480px) {
+            .back-to-home {
+                top: 15px;
+                left: 15px;
             }
-            to {
-                opacity: 1;
-                transform: translateY(0);
+
+            .back-to-home a {
+                padding: 10px 16px;
+                font-size: 13px;
+            }
+
+            .login-container {
+                padding: 30px 20px;
+                margin: 10px;
+                border-radius: 15px;
+            }
+            
+            .login-header h1 {
+                font-size: 24px;
+            }
+            
+            .form-group input {
+                padding: 12px 15px;
+            }
+            
+            .btn {
+                padding: 12px;
             }
         }
 
         .loading {
-            display: none;
+            position: relative;
+            pointer-events: none;
+        }
+
+        .loading::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
             width: 20px;
             height: 20px;
+            margin: -10px 0 0 -10px;
             border: 2px solid transparent;
             border-top: 2px solid white;
             border-radius: 50%;
             animation: spin 1s linear infinite;
-            margin-left: 10px;
         }
 
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
-
-        .social-login {
-            margin: 2rem 0;
-            text-align: center;
-        }
-
-        .divider {
-            position: relative;
-            text-align: center;
-            margin: 2rem 0;
-        }
-
-        .divider::before {
-            content: '';
-            position: absolute;
-            top: 50%;
-            left: 0;
-            right: 0;
-            height: 1px;
-            background: #e2e8f0;
-        }
-
-        .divider span {
-            background: white;
-            padding: 0 1rem;
-            color: #64748b;
-            font-size: 0.9rem;
-        }
-
-        /* Responsive */
-        @media (max-width: 768px) {
-            .nav-menu {
-                position: fixed;
-                left: -100%;
-                top: 70px;
-                flex-direction: column;
-                background-color: rgba(255, 255, 255, 0.98);
-                backdrop-filter: blur(20px);
-                width: 100%;
-                text-align: center;
-                transition: 0.3s;
-                box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
-                padding: 2rem 0;
-            }
-
-            .nav-menu.active {
-                left: 0;
-            }
-
-            .mobile-menu {
-                display: flex;
-            }
-
-            .login-card {
-                padding: 2rem;
-                margin: 1rem;
-            }
-
-            .login-title {
-                font-size: 2rem;
-            }
-
-            .logo-text {
-                font-size: 1.4rem;
-            }
-
-            .form-options {
-                flex-direction: column;
-                gap: 1rem;
-                align-items: flex-start;
-            }
-        }
-
-        @media (max-width: 480px) {
-            .logo-image {
-                width: 60px;
-                height: 60px;
-            }
-
-            .logo-text {
-                font-size: 1.2rem;
-            }
-
-            .login-card {
-                padding: 1.5rem;
-            }
-        }
-        /* Tablet responsiveness */
-@media (max-width: 1024px) {
-    nav {
-        padding: 0 1rem;
-    }
-    .container {
-        max-width: 98vw;
-        padding: 0 1rem;
-    }
-    .login-card {
-        max-width: 90vw;
-        padding: 2.2rem;
-    }
-    .logo-image {
-        width: 65px;
-        height: 65px;
-    }
-    .logo-text {
-        font-size: 1.4rem;
-    }
-}
-
-/* Mobile responsiveness */
-@media (max-width: 768px) {
-    nav {
-        flex-direction: column;
-        align-items: flex-start;
-        padding: 0 0.5rem;
-    }
-    .logo-container {
-        margin-bottom: 1rem;
-    }
-    .nav-menu {
-        position: fixed;
-        left: -100%;
-        top: 70px;
-        flex-direction: column;
-        background-color: rgba(255, 255, 255, 0.98);
-        backdrop-filter: blur(20px);
-        width: 100%;
-        text-align: center;
-        transition: 0.3s;
-        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
-        padding: 2rem 0;
-        z-index: 1001;
-    }
-    .nav-menu.active {
-        left: 0;
-    }
-    .mobile-menu {
-        display: flex;
-        margin-left: auto;
-    }
-    .login-container {
-        padding: 1rem;
-        margin-top: 70px;
-    }
-    .login-card {
-        padding: 1.2rem;
-        margin: 0.5rem;
-        max-width: 98vw;
-    }
-    .login-title {
-        font-size: 1.5rem;
-    }
-    .logo-image {
-        width: 50px;
-        height: 50px;
-    }
-    .logo-text {
-        font-size: 1.1rem;
-    }
-    .form-options {
-        flex-direction: column;
-        gap: 1rem;
-        align-items: flex-start;
-    }
-}
-
-/* Small mobile devices */
-@media (max-width: 480px) {
-    .logo-image {
-        width: 38px;
-        height: 38px;
-    }
-    .logo-text {
-        font-size: 1rem;
-    }
-    .login-card {
-        padding: 0.7rem;
-        margin: 0.2rem;
-    }
-    .login-title {
-        font-size: 1.1rem;
-    }
-    .form-label,
-    .form-input,
-    .forgot-password,
-    .register-link,
-    .login-btn {
-        font-size: 0.95rem;
-    }
-    .form-input {
-        padding: 0.7rem 0.8rem;
-    }
-    .login-btn {
-        padding: 0.8rem;
-    }
-}
     </style>
 </head>
 <body>
-    <!-- Header -->
-    <header>
-        <nav>
-            <div class="logo-container">
-                <img src="janalisu.jpg" alt="Janalisu Logo" class="logo-image">
-                <div class="logo-text">JANALISU EMPOWERMENT GROUP</div>
-            </div>
-
-            <ul class="nav-menu">
-                <li><a href="index.php">Home</a></li>
-                <li><a href="events.php">Events</a></li>
-                <li><a href="donate.php">Donate</a></li>
-                <li><a href="register.php">Register</a></li>
-            </ul>
-            <div class="mobile-menu">
-                <span class="bar"></span>
-                <span class="bar"></span>
-                <span class="bar"></span>
-            </div>
-        </nav>
-    </header>
-
-    <!-- Login Container -->
+    <div class="back-to-home">
+        <a href="index.php">Back to Home</a>
+    </div>
+    
     <div class="login-container">
-        <div class="login-card">
-            <h2 class="login-title">Welcome Back</h2>
-            <p class="login-subtitle">Sign in to your account to continue</p>
-            
-            <!-- Error Message -->
-            <?php if ($error_message): ?>
-                <div class="error-message" style="display: block;"><?php echo htmlspecialchars($error_message); ?></div>
-            <?php endif; ?>
-            
-            <!-- Success Message -->
-            <?php if ($success_message): ?>
-                <div class="success-message" style="display: block;"><?php echo htmlspecialchars($success_message); ?></div>
-            <?php endif; ?>
-            
-            <div id="errorMessage" class="error-message"></div>
-            <div id="successMessage" class="success-message"></div>
-            
-            <form id="loginForm" method="POST" action="">
-                <div class="form-group">
-                    <label for="email" class="form-label">Email Address <span class="required">*</span></label>
-                    <input type="email" id="email" name="email" class="form-input" value="<?php echo htmlspecialchars($email ?? ''); ?>" required autocomplete="email">
-                </div>
-                
-                <div class="form-group">
-                    <label for="password" class="form-label">Password <span class="required">*</span></label>
-                    <div style="position: relative;">
-                        <input type="password" id="password" name="password" class="form-input" required autocomplete="current-password">
-                        <span class="password-toggle" onclick="togglePassword('password')">👁️</span>
-                    </div>
-                </div>
-                
-                <div class="form-options">
-                    <label class="remember-me">
-                        <input type="checkbox" name="remember_me" id="remember_me">
-                        Remember me
-                    </label>
-                    <a href="forgot_password.php" class="forgot-password">Forgot Password?</a>
-                </div>
-                
-                <button type="submit" class="login-btn">
-                    Sign In
-                    <span class="loading" id="loadingSpinner"></span>
-                </button>
-            </form>
-            
-            <div class="register-link">
-                Don't have an account? <a href="register.php">Join Our Team</a>
+        <div class="login-header">
+            <div class="logo">A</div>
+            <h1>Admin Login</h1>
+            <p>Sign in to your account</p>
+        </div>
+
+        <?php if ($error): ?>
+            <div class="alert alert-error"><?php echo htmlspecialchars($error); ?></div>
+        <?php endif; ?>
+
+        <?php if ($success): ?>
+            <div class="alert alert-success"><?php echo htmlspecialchars($success); ?></div>
+        <?php endif; ?>
+
+        <form method="POST" action="" id="loginForm">
+            <div class="form-group">
+                <label for="username">Username or Email</label>
+                <input type="text" id="username" name="username" value="<?php echo htmlspecialchars($_POST['username'] ?? ''); ?>" required autocomplete="off">
             </div>
+
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" required autocomplete="off">
+            </div>
+
+            <div class="checkbox-group">
+                <input type="checkbox" id="remember_me" name="remember_me">
+                <label for="remember_me">Remember me for 30 days</label>
+            </div>
+
+            <button type="submit" class="btn" id="loginBtn">Sign In</button>
+        </form>
+
+        <div class="forgot-password">
+            <a href="forgot-password.php">Forgot your password?</a>
         </div>
     </div>
 
     <script>
-        // Mobile menu toggle
-        const mobileMenu = document.querySelector('.mobile-menu');
-        const navMenu = document.querySelector('.nav-menu');
-
-        mobileMenu.addEventListener('click', function() {
-            mobileMenu.classList.toggle('active');
-            navMenu.classList.toggle('active');
-        });
-
-        // Password toggle functionality
-        function togglePassword(fieldId) {
-            const passwordInput = document.getElementById(fieldId);
-            const toggleIcon = passwordInput.nextElementSibling;
-            
-            if (passwordInput.type === 'password') {
-                passwordInput.type = 'text';
-                toggleIcon.textContent = '🙈';
-            } else {
-                passwordInput.type = 'password';
-                toggleIcon.textContent = '👁️';
-            }
-        }
-
-        // Form validation and submission
         document.getElementById('loginForm').addEventListener('submit', function(e) {
-            const email = document.getElementById('email').value.trim();
-            const password = document.getElementById('password').value;
+            const btn = document.getElementById('loginBtn');
+            btn.classList.add('loading');
+            btn.textContent = 'Signing in...';
             
-            // Clear previous messages
-            hideMessages();
-            
-            // Client-side validation
-            if (!email || !password) {
-                e.preventDefault();
-                showError('Please enter both email and password.');
-                return;
-            }
-            
-            if (!validateEmail(email)) {
-                e.preventDefault();
-                showError('Please enter a valid email address.');
-                return;
-            }
-            
-            // Show loading state
-            const loadingSpinner = document.getElementById('loadingSpinner');
-            const submitBtn = document.querySelector('.login-btn');
-            
-            loadingSpinner.style.display = 'inline-block';
-            submitBtn.disabled = true;
-            submitBtn.style.opacity = '0.7';
+            // Add a small delay to show loading state
+            setTimeout(() => {
+                // Form will submit naturally
+            }, 500);
         });
 
-        // Email validation
-        function validateEmail(email) {
-            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-            return emailRegex.test(email);
-        }
+        // Add enter key support
+        document.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                document.getElementById('loginForm').submit();
+            }
+        });
 
-        // Show error message
-        function showError(message) {
-            const errorDiv = document.getElementById('errorMessage');
-            errorDiv.textContent = message;
-            errorDiv.style.display = 'block';
-            
-            // Auto hide after 5 seconds
-            setTimeout(() => {
-                errorDiv.style.display = 'none';
-            }, 5000);
-        }
-
-        // Show success message
-        function showSuccess(message) {
-            const successDiv = document.getElementById('successMessage');
-            successDiv.textContent = message;
-            successDiv.style.display = 'block';
-        }
-
-        // Hide all messages
-        function hideMessages() {
-            document.getElementById('errorMessage').style.display = 'none';
-            document.getElementById('successMessage').style.display = 'none';
-        }
-
-        // Input field animations
-        document.querySelectorAll('.form-input').forEach(input => {
+        // Add some visual feedback for input fields
+        const inputs = document.querySelectorAll('input[type="text"], input[type="password"]');
+        inputs.forEach(input => {
             input.addEventListener('focus', function() {
                 this.parentElement.style.transform = 'scale(1.02)';
             });
@@ -830,81 +527,8 @@ if (isset($_GET['registered']) && $_GET['registered'] === 'success') {
             });
         });
 
-        // Auto-hide success message from URL parameter
-        setTimeout(() => {
-            const urlParams = new URLSearchParams(window.location.search);
-            if (urlParams.get('registered') === 'success') {
-                // Remove the parameter from URL without refreshing
-                const newUrl = window.location.pathname;
-                window.history.replaceState({}, document.title, newUrl);
-            }
-        }, 5000);
-
-        // Add floating animation to login card
-        const loginCard = document.querySelector('.login-card');
-        let floatDirection = 1;
-        
-        setInterval(() => {
-            const currentTransform = loginCard.style.transform || 'translateY(0px)';
-            const currentY = parseFloat(currentTransform.match(/translateY\((-?\d+(?:\.\d+)?)px\)/)?.[1] || 0);
-            
-            if (currentY >= 5) floatDirection = -1;
-            if (currentY <= -5) floatDirection = 1;
-            
-            const newY = currentY + (floatDirection * 0.5);
-            loginCard.style.transform = `translateY(${newY}px)`;
-        }, 100);
-
-        // Handle form submission with AJAX (optional enhancement)
-        function submitLoginForm(formData) {
-            const xhr = new XMLHttpRequest();
-            xhr.open('POST', '', true);
-            xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
-            
-            xhr.onreadystatechange = function() {
-                if (xhr.readyState === 4) {
-                    const loadingSpinner = document.getElementById('loadingSpinner');
-                    const submitBtn = document.querySelector('.login-btn');
-                    
-                    loadingSpinner.style.display = 'none';
-                    submitBtn.disabled = false;
-                    submitBtn.style.opacity = '1';
-                    
-                    try {
-                        const response = JSON.parse(xhr.responseText);
-                        if (response.success) {
-                            showSuccess(response.message);
-                            setTimeout(() => {
-                                window.location.href = response.redirect;
-                            }, 1000);
-                        } else {
-                            showError(response.message);
-                        }
-                    } catch (e) {
-                        showError('An error occurred. Please try again.');
-                    }
-                }
-            };
-            
-            xhr.send(formData);
-        }
-
-        // Keyboard shortcuts
-        document.addEventListener('keydown', function(e) {
-            // Enter key to submit form when focused on form elements
-            if (e.key === 'Enter' && (e.target.matches('.form-input') || e.target.matches('.login-btn'))) {
-                const form = document.getElementById('loginForm');
-                form.dispatchEvent(new Event('submit'));
-            }
-        });
-
-        // Focus on email field when page loads
-        window.addEventListener('load', function() {
-            const emailField = document.getElementById('email');
-            if (emailField && !emailField.value) {
-                emailField.focus();
-            }
-        });
+        // Auto-focus on username field
+        document.getElementById('username').focus();
     </script>
 </body>
 </html>
